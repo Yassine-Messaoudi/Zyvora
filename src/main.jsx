@@ -345,22 +345,14 @@ function Router() {
 }
 
 function HomePage() {
-  const [products, setProducts] = useState([]);
   const [reviews, setReviews] = useState([]);
-  const cart = useCart();
   useEffect(() => {
-    Promise.all([api("/products?sort=popular"), api("/reviews")])
-      .then(([prod, rev]) => {
-        setProducts(Array.isArray(prod) ? prod.slice(0, 8) : []);
-        setReviews(Array.isArray(rev) ? rev : []);
-      })
+    api("/reviews")
+      .then((rev) => setReviews(Array.isArray(rev) ? rev : []))
       .catch(() => {
-        setProducts([]);
         setReviews([]);
       });
   }, []);
-
-  const featuredProducts = products;
 
   return (
     <main className="landing-page">
@@ -368,14 +360,6 @@ function HomePage() {
       <StatsRow />
       <TrustCards />
       <CategoriesSection />
-      <section className="container-shell landing-section">
-        <SectionHeading eyebrow="Featured" title="Popular Drops" text="Verified digital stock with checkout-ready delivery paths and dashboard access." />
-        <div className="landing-product-grid mt-8">
-          {featuredProducts.map((product, index) => (
-            <ProductCard key={product.id || product.slug || product.name} product={product} index={index} onAdd={() => cart.add(product)} />
-          ))}
-        </div>
-      </section>
       <ReviewsSection reviews={reviews} />
       <FaqSection />
     </main>
@@ -634,20 +618,22 @@ function ProductsPage() {
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-12">
-      <div className="products-search-bar">
-        <span className="text-xs font-bold uppercase tracking-widest text-blue-300">Keyword</span>
-        <div className="search-input-wrap">
-          <Search className="h-4 w-4 text-slate-400" />
-          <input value={search} onChange={(e) => { setSearch(e.target.value); setActivePill(""); }} placeholder="Search products..." />
+      <div className="product-filter-panel">
+        <div className="products-search-bar">
+          <span>Keyword</span>
+          <div className="search-input-wrap">
+            <Search className="h-4 w-4 text-slate-400" />
+            <input value={search} onChange={(e) => { setSearch(e.target.value); setActivePill(""); }} placeholder="Search products..." />
+          </div>
         </div>
-      </div>
-      <div className="category-pills-section mt-6">
-        <span className="text-xs font-bold uppercase tracking-widest text-blue-300">Category</span>
-        <div className="category-pills mt-2">
-          <button className={`cat-pill ${activePill === "" ? "active" : ""}`} onClick={() => { setActivePill(""); setSearch(""); }}>All</button>
-          {catData.map((c) => (
-            <button key={c.name} className={`cat-pill ${activePill === c.name ? "active" : ""}`} onClick={() => { setActivePill(c.name); setSearch(""); }}>{c.name}</button>
-          ))}
+        <div className="category-pills-section">
+          <span>Category</span>
+          <div className="category-pills">
+            <button className={`cat-pill ${activePill === "" ? "active" : ""}`} onClick={() => { setActivePill(""); setSearch(""); }}>All</button>
+            {catData.map((c) => (
+              <button key={c.name} className={`cat-pill ${activePill === c.name ? "active" : ""}`} onClick={() => { setActivePill(c.name); setSearch(""); }}>{c.name}</button>
+            ))}
+          </div>
         </div>
       </div>
       <div className="product-grid mt-8">

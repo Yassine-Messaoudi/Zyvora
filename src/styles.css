@@ -857,19 +857,60 @@ button:disabled {
 
 /* ── Products page: search + category pills ── */
 
+.product-filter-panel {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(125, 249, 255, 0.14);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(12, 22, 40, 0.58), rgba(5, 11, 22, 0.52)),
+    radial-gradient(circle at 14% 0%, rgba(30, 144, 255, 0.12), transparent 18rem);
+  padding: clamp(1.1rem, 2vw, 1.45rem);
+  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(18px) saturate(1.16);
+  -webkit-backdrop-filter: blur(18px) saturate(1.16);
+}
+
+.product-filter-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(rgba(125, 249, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(125, 249, 255, 0.035) 1px, transparent 1px);
+  background-size: 42px 42px;
+  opacity: 0.5;
+}
+
+.product-filter-panel > * {
+  position: relative;
+  z-index: 1;
+}
+
 .products-search-bar {
-  max-width: 700px;
+  max-width: none;
+}
+
+.products-search-bar > span,
+.category-pills-section > span {
+  display: block;
+  color: #c7d4e4;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 .search-input-wrap {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  margin-top: 0.5rem;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: rgba(9, 21, 34, 0.78);
-  padding: 0.82rem 1rem;
+  margin-top: 0.9rem;
+  border: 1px solid rgba(125, 249, 255, 0.14);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.045);
+  padding: 0.68rem 0.9rem;
 }
 
 .search-input-wrap input {
@@ -881,20 +922,26 @@ button:disabled {
   font-size: 0.95rem;
 }
 
+.category-pills-section {
+  margin-top: 1.35rem;
+}
+
 .category-pills {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
+  gap: 0.62rem;
+  margin-top: 1rem;
 }
 
 .cat-pill {
-  padding: 0.45rem 1rem;
-  border: 1px solid var(--line);
+  min-height: 34px;
+  padding: 0.42rem 1.2rem;
+  border: 1px solid rgba(125, 249, 255, 0.08);
   border-radius: 999px;
-  background: rgba(9, 21, 34, 0.6);
-  color: var(--muted);
-  font-size: 0.82rem;
-  font-weight: 700;
+  background: rgba(255, 255, 255, 0.055);
+  color: #eaf3ff;
+  font-size: 0.86rem;
+  font-weight: 800;
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -905,10 +952,10 @@ button:disabled {
 }
 
 .cat-pill.active {
-  border-color: var(--cyan);
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.22), rgba(59, 130, 246, 0.14));
+  border-color: rgba(20, 184, 255, 0.5);
+  background: linear-gradient(135deg, #149dff, #00d9ff);
   color: white;
-  box-shadow: 0 0 16px rgba(59, 130, 246, 0.12);
+  box-shadow: 0 0 18px rgba(20, 184, 255, 0.22);
 }
 
 /* ── Product detail: specs grid ── */
@@ -2466,6 +2513,40 @@ button:disabled {
   background:
     radial-gradient(circle at 77% 0%, rgba(59, 130, 246, 0.12), transparent 25rem),
     linear-gradient(180deg, #050b16, #020812);
+}
+
+.landing-page .zy-hero-card,
+.landing-page .metric-card,
+.landing-page .feature-card,
+.landing-page .zy-category-card,
+.landing-page .review-card,
+.landing-page .review-empty-state,
+.landing-page .faq-item,
+.landing-page .eyebrow-badge,
+.landing-page .zy-float-badge {
+  background:
+    linear-gradient(180deg, rgba(11, 27, 44, 0.62), rgba(5, 11, 22, 0.54)),
+    radial-gradient(circle at 50% 0%, rgba(125, 249, 255, 0.12), transparent 14rem);
+  border-color: rgba(125, 249, 255, 0.2);
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(22px) saturate(1.22);
+  -webkit-backdrop-filter: blur(22px) saturate(1.22);
+}
+
+.landing-page .zy-category-card:hover,
+.landing-page .feature-card:hover,
+.landing-page .metric-card:hover,
+.landing-page .faq-item:hover {
+  background:
+    linear-gradient(180deg, rgba(11, 27, 44, 0.76), rgba(5, 11, 22, 0.68)),
+    radial-gradient(circle at 50% 0%, rgba(125, 249, 255, 0.18), transparent 13rem);
+  border-color: rgba(125, 249, 255, 0.38);
+  box-shadow:
+    0 28px 92px rgba(0, 0, 0, 0.34),
+    0 0 34px rgba(0, 217, 255, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 @media (max-width: 1120px) {
