@@ -219,104 +219,6 @@ const browseCategories = [
   { name: "Other", category: "Other", icon: Boxes }
 ];
 
-const featuredFallbackProducts = [
-  {
-    id: "fallback-chatgpt-plus",
-    name: "ChatGPT Plus",
-    slug: "chatgpt-plus",
-    category: "Accounts",
-    price: 14.99,
-    stockCount: 24,
-    badge: "Popular",
-    rating: "4.9",
-    image: "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=900&q=80",
-    description: "Fresh digital access with protected delivery logs and dashboard history."
-  },
-  {
-    id: "fallback-chatgpt-accounts",
-    name: "ChatGPT Accounts",
-    slug: "chatgpt-accounts",
-    category: "Accounts",
-    price: 9.99,
-    stockCount: 38,
-    badge: "Hot",
-    rating: "4.8",
-    image: "https://images.unsplash.com/photo-1676299081847-824916de030a?auto=format&fit=crop&w=900&q=80",
-    description: "Verified account stock delivered after invoice confirmation."
-  },
-  {
-    id: "fallback-valorant",
-    name: "Valorant Accounts",
-    slug: "valorant-accounts",
-    category: "Games",
-    price: 29,
-    stockCount: 11,
-    badge: "New",
-    rating: "4.7",
-    image: "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=900&q=80",
-    description: "Rank-ready game accounts with clear replacement support."
-  },
-  {
-    id: "fallback-cs2",
-    name: "CS2 Prime Accounts",
-    slug: "cs2-prime-accounts",
-    category: "Games",
-    price: 18.5,
-    stockCount: 16,
-    badge: "Verified",
-    rating: "4.9",
-    image: "https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=900&q=80",
-    description: "Prime-ready access with instant order visibility."
-  },
-  {
-    id: "fallback-fortnite",
-    name: "Fortnite Account Gen",
-    slug: "fortnite-account-gen",
-    category: "Tools",
-    price: 24.99,
-    stockCount: 8,
-    badge: "Best Value",
-    rating: "4.8",
-    image: "https://images.unsplash.com/photo-1560253023-3ec5d502959f?auto=format&fit=crop&w=900&q=80",
-    description: "Private generator access delivered as a protected link."
-  },
-  {
-    id: "fallback-nordvpn",
-    name: "NordVPN Lifetime",
-    slug: "nordvpn-lifetime",
-    category: "VPN",
-    price: 12,
-    stockCount: 31,
-    badge: "Value",
-    rating: "4.6",
-    image: "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=900&q=80",
-    description: "VPN credentials with support notes attached to the order."
-  },
-  {
-    id: "fallback-spotify",
-    name: "Spotify Premium",
-    slug: "spotify-premium",
-    category: "Accounts",
-    price: 6.5,
-    stockCount: 57,
-    badge: "Fast",
-    rating: "4.7",
-    image: "https://images.unsplash.com/photo-1516280440614-37939bbacd81?auto=format&fit=crop&w=900&q=80",
-    description: "Premium access stock with quick checkout and delivery logs."
-  },
-  {
-    id: "fallback-netflix",
-    name: "Netflix Lifetime",
-    slug: "netflix-lifetime",
-    category: "Accounts",
-    price: 15,
-    stockCount: 19,
-    badge: "Limited",
-    rating: "4.8",
-    image: "https://images.unsplash.com/photo-1522869635100-9f4c5e86aa37?auto=format&fit=crop&w=900&q=80",
-    description: "Streaming access with replacement-aware order support."
-  }
-];
 
 function App() {
   const route = useRoute();
@@ -397,7 +299,7 @@ function Shell({ children }) {
       </header>
       {open && (
         <div className="fixed inset-0 z-50 bg-black/70 lg:hidden">
-          <div className="ml-auto h-full w-80 border-l border-cyan-400/15 bg-[#07111D] p-5 shadow-2xl">
+          <div className="ml-auto h-full w-80 border-l border-blue-500/15 bg-[#07111D] p-5 shadow-2xl">
             <div className="flex items-center justify-between">
               <span className="font-bold">Menu</span>
               <button className="icon-btn" onClick={() => setOpen(false)} aria-label="Close menu">
@@ -458,7 +360,7 @@ function HomePage() {
       });
   }, []);
 
-  const featuredProducts = products.length ? products : featuredFallbackProducts;
+  const featuredProducts = products;
 
   return (
     <main className="landing-page">
@@ -483,42 +385,32 @@ function HomePage() {
 function HeroSection() {
   return (
     <section className="zy-hero">
-      <div className="hero-particles" />
+      <div className="hero-bg-image" />
+      <div className="hero-bg-overlay" />
       <div className="zy-hero-shell">
         <motion.div className="zy-hero-copy" initial={{ opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55 }}>
           <div className="eyebrow-badge">
-            <ShieldCheck className="h-4 w-4" /> Verified digital products
+            <ShieldCheck className="h-4 w-4" /> Verified Digital Products
           </div>
           <h1>
-            Premium digital products,
-            <span> delivered instantly.</span>
+            Your Gaming Marketplace,
+            <span> Instant Delivery.</span>
           </h1>
           <p className="hero-lede">
-            Crypto invoices, verified stock, secure delivery logs, and a dashboard for every account, key, file, and private link.
+            Secure crypto payments, verified game accounts, instant key delivery, and a personal dashboard for every purchase.
           </p>
           <div className="hero-actions">
-            <a href="https://discord.gg/your-server" className="primary-btn">
-              <MessageCircle className="h-5 w-5" /> Join Discord
-            </a>
-            <Link href="/products" className="secondary-btn">
+            <Link href="/products" className="primary-btn">
               <Package className="h-5 w-5" /> Browse Products
             </Link>
+            <a href="https://discord.gg/your-server" className="secondary-btn">
+              <MessageCircle className="h-5 w-5" /> Join Discord
+            </a>
           </div>
-        </motion.div>
-
-        <motion.div className="zy-hero-visual" initial={{ opacity: 0, scale: 0.96, y: 18 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 0.7 }}>
-          <div className="zy-hero-card">
-            <div className="hero-orbit" />
-            <motion.img
-              className="zy-hero-img"
-              src="/images/hero-reference-characters.png"
-              alt="Cyber gaming marketplace characters"
-              animate={{ y: [0, -10, 0] }}
-              transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
-            />
-            <span className="zy-float-badge zy-float-top"><Wallet className="h-4 w-4" /> LTC • BTC • SOL • ETH</span>
-            <span className="zy-float-badge zy-float-left"><Zap className="h-4 w-4" /> Instant delivery</span>
-            <span className="zy-float-badge zy-float-bottom"><Timer className="h-4 w-4" /> 15 min invoices</span>
+          <div className="hero-trust-row">
+            <span><ShieldCheck className="h-4 w-4" /> Verified Stock</span>
+            <span><Zap className="h-4 w-4" /> Instant Delivery</span>
+            <span><Wallet className="h-4 w-4" /> Crypto Payments</span>
           </div>
         </motion.div>
       </div>
@@ -673,7 +565,7 @@ function ProductCard({ product, onAdd }) {
         <h3>{product.name}</h3>
         <p>{product.description || "Verified digital product with protected checkout and dashboard delivery."}</p>
         <div className="product-buy-row">
-          <strong className="text-cyan-200"><Money value={product.price} /></strong>
+          <strong className="text-blue-300"><Money value={product.price} /></strong>
           <span className="stock-count">{inStock ? `${product.stockCount} left` : "Restocking"}</span>
         </div>
         <div className="product-actions">
@@ -689,7 +581,7 @@ function ProductCard({ product, onAdd }) {
 
 function Stars({ rating, compact = false }) {
   return (
-    <span className="flex items-center gap-1 text-cyan-200">
+    <span className="flex items-center gap-1 text-blue-300">
       <Star className="h-4 w-4 fill-current" />
       <span className={compact ? "text-xs" : "text-sm"}>{rating || "New"}</span>
     </span>
@@ -743,14 +635,14 @@ function ProductsPage() {
   return (
     <section className="mx-auto max-w-7xl px-4 py-12">
       <div className="products-search-bar">
-        <span className="text-xs font-bold uppercase tracking-widest text-cyan-200">Keyword</span>
+        <span className="text-xs font-bold uppercase tracking-widest text-blue-300">Keyword</span>
         <div className="search-input-wrap">
           <Search className="h-4 w-4 text-slate-400" />
           <input value={search} onChange={(e) => { setSearch(e.target.value); setActivePill(""); }} placeholder="Search products..." />
         </div>
       </div>
       <div className="category-pills-section mt-6">
-        <span className="text-xs font-bold uppercase tracking-widest text-cyan-200">Category</span>
+        <span className="text-xs font-bold uppercase tracking-widest text-blue-300">Category</span>
         <div className="category-pills mt-2">
           <button className={`cat-pill ${activePill === "" ? "active" : ""}`} onClick={() => { setActivePill(""); setSearch(""); }}>All</button>
           {catData.map((c) => (
@@ -767,7 +659,7 @@ function ProductsPage() {
             <div className="product-content">
               <h3>{c.name}</h3>
               <div className="product-buy-row">
-                <strong className="text-cyan-200">
+                <strong className="text-blue-300">
                   {c.minPrice === c.maxPrice ? <Money value={c.minPrice} /> : <><Money value={c.minPrice} /> – <Money value={c.maxPrice} /></>}
                 </strong>
                 <span className="stock-badge in">
@@ -779,7 +671,7 @@ function ProductsPage() {
         ))}
         {filteredCats.length === 0 && (
           <div className="empty-state col-span-full">
-            <Package className="h-8 w-8 text-cyan-200" />
+            <Package className="h-8 w-8 text-blue-300" />
             <p>No categories found.</p>
           </div>
         )}
@@ -801,7 +693,7 @@ function ProductsPage() {
                   </div>
                   <h4>{product.name}</h4>
                   <div className="modal-product-meta">
-                    <span className="text-cyan-200 font-bold"><Money value={product.price} /></span>
+                    <span className="text-blue-300 font-bold"><Money value={product.price} /></span>
                     <span className={`stock-badge ${product.stockCount > 0 ? "in" : "out"}`}>
                       {product.stockCount > 0 ? `${product.stockCount} in stock` : "Out of stock"}
                     </span>
@@ -856,9 +748,9 @@ function ProductDetail({ slug }) {
             )}
             {product.features?.length > 0 && (
               <div className="mt-8">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2"><Zap className="h-5 w-5 text-cyan-200" /> Key Features</h3>
+                <h3 className="text-lg font-bold text-white flex items-center gap-2"><Zap className="h-5 w-5 text-blue-300" /> Key Features</h3>
                 <ul className="feature-list mt-3">
-                  {product.features.map((f) => <li key={f}><CheckCircle2 className="h-4 w-4 text-cyan-300 shrink-0" /><span>{f}</span></li>)}
+                  {product.features.map((f) => <li key={f}><CheckCircle2 className="h-4 w-4 text-blue-300 shrink-0" /><span>{f}</span></li>)}
                 </ul>
               </div>
             )}
@@ -884,7 +776,7 @@ function ProductDetail({ slug }) {
             <div className="purchase-product-row mt-3">
               <div>
                 <strong className="text-white">{product.name}</strong>
-                <span className="text-2xl font-black text-cyan-200"><Money value={product.price} /></span>
+                <span className="text-2xl font-black text-blue-300"><Money value={product.price} /></span>
               </div>
               <span className={`stock-badge ${inStock ? "in" : "out"}`}>{inStock ? `${product.stockCount} In Stock` : "Out of Stock"}</span>
             </div>
@@ -924,7 +816,7 @@ function ProductDetail({ slug }) {
           </div>
         ) : (
           <div className="empty-state mt-6">
-            <Star className="h-8 w-8 text-cyan-200" />
+            <Star className="h-8 w-8 text-blue-300" />
             <p>No approved purchase reviews yet.</p>
           </div>
         )}
@@ -940,7 +832,7 @@ function InfoList({ title, items }) {
       <ul>
         {items?.map((item) => (
           <li key={item}>
-            <CheckCircle2 className="h-4 w-4 text-cyan-200" />
+            <CheckCircle2 className="h-4 w-4 text-blue-300" />
             {item}
           </li>
         ))}
@@ -962,7 +854,7 @@ function CartPage() {
                 <img src={item.image} alt={item.name} />
                 <div className="min-w-0 flex-1">
                   <p className="font-bold text-white">{item.name}</p>
-                  <p className="text-sm text-cyan-200">{item.category}</p>
+                  <p className="text-sm text-blue-300">{item.category}</p>
                   <p className="mt-1 text-slate-300"><Money value={item.price} /></p>
                 </div>
                 <div className="quantity">
@@ -993,7 +885,7 @@ function CartPage() {
         </div>
       ) : (
         <div className="empty-state mt-8">
-          <ShoppingCart className="h-8 w-8 text-cyan-200" />
+          <ShoppingCart className="h-8 w-8 text-blue-300" />
           <p>Your cart is empty.</p>
           <Link href="/products" className="primary-btn mt-4">
             Browse Products
@@ -1064,7 +956,7 @@ function CheckoutPage() {
       <form className="mt-8 grid gap-6 lg:grid-cols-[340px_1fr]" onSubmit={submit}>
         <aside className="co-sidebar">
           <div className="co-sidebar-head">
-            <div className="co-logo-row"><Zap className="h-5 w-5 text-cyan-300" /><span className="font-bold text-white">ZYVORA</span></div>
+            <div className="co-logo-row"><Zap className="h-5 w-5 text-blue-300" /><span className="font-bold text-white">ZYVORA</span></div>
           </div>
           <p className="co-pay-label">PAY ZYVORA</p>
           <p className="co-total"><Money value={cart.total} /></p>
@@ -1419,7 +1311,7 @@ function DashboardPage() {
       {data && (
         <div className="mt-8 grid gap-6 lg:grid-cols-[320px_1fr]">
           <aside className="summary-panel">
-            <UserCircle className="h-8 w-8 text-cyan-200" />
+            <UserCircle className="h-8 w-8 text-blue-300" />
             <p className="mt-4 text-white">{data.customer.email || "Invoice access"}</p>
             <p className="mt-1 text-sm text-slate-400">Balance</p>
             <p className="text-3xl font-black text-white">{money(data.customer.balance || 0)}</p>
@@ -1451,7 +1343,7 @@ function DashboardBlock({ title, icon: Icon, children }) {
   return (
     <div className="admin-panel">
       <h3 className="mb-5 flex items-center gap-2 text-xl font-black text-white">
-        <Icon className="h-5 w-5 text-cyan-200" /> {title}
+        <Icon className="h-5 w-5 text-blue-300" /> {title}
       </h3>
       {children}
     </div>
@@ -1468,7 +1360,7 @@ function OrderCard({ order }) {
       <div className="mt-4 grid gap-3">
         {order.deliveryItems.map((item) => (
           <div key={item.productId} className="delivery-item">
-            <Download className="h-5 w-5 text-cyan-200" />
+            <Download className="h-5 w-5 text-blue-300" />
             <div>
               <p className="font-bold text-white">{item.name}</p>
               {item.delivered.map((value) => (
@@ -1494,15 +1386,6 @@ const adminNavItems = [
   ["settings", "Settings", Settings]
 ];
 
-const mockAdminOrders = [
-  { id: "ORD-2401", customerEmail: "buyer@zyvora.local", product: "ChatGPT Plus", totalUsd: 14.99, paymentMethod: "LTC", status: "paid", deliveryStatus: "delivered", createdAt: new Date().toISOString() },
-  { id: "ORD-2402", customerEmail: "owner@zyvora.local", product: "FiveM Core Pack", totalUsd: 49.99, paymentMethod: "BTC", status: "pending", deliveryStatus: "queued", createdAt: new Date(Date.now() - 86400000).toISOString() }
-];
-
-const mockAdminInvoices = [
-  { id: "INV-LTC-8F31", customerEmail: "buyer@zyvora.local", selectedCoin: "LTC", expectedCryptoAmount: "0.14250000", paidAmount: "0.14250000", depositAddress: "ltc1qexampleinvoiceaddress", confirmations: 6, status: "paid", expiresAt: new Date(Date.now() + 900000).toISOString(), txid: "ltc_tx_example" },
-  { id: "INV-SOL-2C90", customerEmail: "new@zyvora.local", selectedCoin: "SOL", expectedCryptoAmount: "0.620000", paidAmount: "0", depositAddress: "SoLExampleDepositAddress", confirmations: 0, status: "pending", expiresAt: new Date(Date.now() + 600000).toISOString(), txid: "" }
-];
 
 function AdminPage({ section }) {
   const [token, setToken] = useState(localStorage.getItem(ADMIN_TOKEN_KEY) || "");
@@ -1786,10 +1669,10 @@ function AdminContent({ section, data, headers, onChange }) {
       </div>
       <div className="admin-overview-grid">
         <AdminPanel title="Recent Orders" text="Latest customer purchases and delivery activity." icon={ShoppingCart}>
-          <AdminMiniRows rows={mockAdminOrders.map((order) => [order.id, order.customerEmail, money(order.totalUsd), order.status])} empty="No orders yet." />
+          <AdminMiniRows rows={[]} empty="No orders yet." />
         </AdminPanel>
         <AdminPanel title="Recent Invoices" text="Crypto invoice states and confirmation progress." icon={Wallet}>
-          <AdminMiniRows rows={mockAdminInvoices.map((invoice) => [invoice.id, invoice.selectedCoin, invoice.expectedCryptoAmount, invoice.status])} empty="No invoices yet." />
+          <AdminMiniRows rows={[]} empty="No invoices yet." />
         </AdminPanel>
         <AdminPanel title="Low Stock Products" text="Products that need fresh keys, accounts, or files." icon={AlertTriangle}>
           {lowStock.length ? (
@@ -1830,7 +1713,7 @@ function AdminMiniRows({ rows, empty }) {
 }
 
 function AdminOrders({ data }) {
-  const orders = Array.isArray(data) && data.length ? data : mockAdminOrders;
+  const orders = Array.isArray(data) ? data : [];
   const stats = [
     ["Total Orders", orders.length, ShoppingCart],
     ["Paid Orders", orders.filter((o) => o.status === "paid").length, CheckCircle2],
@@ -1879,7 +1762,7 @@ function AdminPlaceholder({ section }) {
 }
 
 function AdminInvoices({ data, headers, onChange }) {
-  const source = Array.isArray(data) && data.length ? data : mockAdminInvoices;
+  const source = Array.isArray(data) ? data : [];
   const [filter, setFilter] = useState("all");
   const [message, setMessage] = useState("");
   const filtered = filter === "all" ? source : source.filter((inv) => inv.status === filter);
@@ -2165,11 +2048,11 @@ function AdminProducts({ data, headers, onChange }) {
           <AdminField label="Product Image" wide>
             <div className="flex items-start gap-4">
               <label className="upload-area">
-                <Upload className="h-5 w-5 text-cyan-200" />
+                <Upload className="h-5 w-5 text-blue-300" />
                 <span>Click to upload image</span>
                 <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
               </label>
-              {currentPreview && <img src={currentPreview} alt="Preview" className="h-20 w-20 rounded-lg object-cover border border-cyan-400/20" />}
+              {currentPreview && <img src={currentPreview} alt="Preview" className="h-20 w-20 rounded-lg object-cover border border-blue-500/20" />}
             </div>
             <input value={form.image} onChange={(event) => setForm({ ...form, image: event.target.value })} placeholder="Or paste image URL..." className="mt-2" />
           </AdminField>
@@ -2323,11 +2206,11 @@ function AdminCategories({ data, headers, onChange }) {
             <span>Category image</span>
             <div className="flex items-center gap-3">
               <label className="upload-area small">
-                <Upload className="h-4 w-4 text-cyan-200" />
+                <Upload className="h-4 w-4 text-blue-300" />
                 <span>Upload</span>
                 <input type="file" accept="image/*" onChange={handleCatImage} className="hidden" />
               </label>
-              {catImagePreview && <img src={catImagePreview} alt="Preview" className="h-12 w-12 rounded object-cover border border-cyan-400/20" />}
+              {catImagePreview && <img src={catImagePreview} alt="Preview" className="h-12 w-12 rounded object-cover border border-blue-500/20" />}
             </div>
           </label>
           <button className="primary-btn">{editingId ? "Save Category" : "Add Category"}</button>
@@ -2439,13 +2322,13 @@ function SupportPage() {
       <SectionHeading eyebrow="Support" title="Get Help" />
       <div className="mt-8 grid gap-4 md:grid-cols-2">
         <a className="support-card" href="https://discord.gg/your-server">
-          <MessageCircle className="h-7 w-7 text-cyan-200" />
+          <MessageCircle className="h-7 w-7 text-blue-300" />
           <h3>Discord Support</h3>
           <p>Open a ticket with your invoice ID and email address.</p>
           <ExternalLink className="h-5 w-5" />
         </a>
         <a className="support-card" href="mailto:support@zyvora.local">
-          <Mail className="h-7 w-7 text-cyan-200" />
+          <Mail className="h-7 w-7 text-blue-300" />
           <h3>Email Support</h3>
           <p>Use email for delivery issues, replacement checks, and manual orders.</p>
           <ExternalLink className="h-5 w-5" />
@@ -2489,7 +2372,7 @@ function Footer() {
 }
 
 function Loading() {
-  return <div className="mx-auto max-w-7xl px-4 py-20 text-cyan-200">Loading...</div>;
+  return <div className="mx-auto max-w-7xl px-4 py-20 text-blue-300">Loading...</div>;
 }
 
 function ErrorMessage({ message }) {
