@@ -545,8 +545,8 @@ function ProductsPage() {
                 <strong className="text-cyan-200">
                   {c.minPrice === c.maxPrice ? money(c.minPrice) : `${money(c.minPrice)} - ${money(c.maxPrice)}`}
                 </strong>
-                <span className={`stock-badge ${c.totalStock > 0 ? "in" : "out"}`}>
-                  {c.totalStock > 0 ? `${c.totalStock} in stock` : "Out of stock"}
+                <span className="stock-badge in">
+                  {c.items.length} {c.items.length === 1 ? "product" : "products"}
                 </span>
               </div>
             </div>

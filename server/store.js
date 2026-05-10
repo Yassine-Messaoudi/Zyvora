@@ -256,6 +256,21 @@ export function publicProduct(product) {
   };
 }
 
+export function publicProductListItem(product) {
+  if (!product) return null;
+  return {
+    id: product.id,
+    slug: product.slug,
+    name: product.name,
+    category: product.category,
+    price: product.price,
+    image: product.image,
+    badge: product.badge,
+    stockCount: product.stockCount,
+    stockStatus: product.stockStatus
+  };
+}
+
 // ── Invoices ──
 
 export async function getAllInvoices() {

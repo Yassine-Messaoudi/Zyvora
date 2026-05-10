@@ -8,14 +8,14 @@ import jwt from "jsonwebtoken";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import fs from "node:fs";
+
 import { fileURLToPath } from "node:url";
 import multer from "multer";
 import { initDatabase, getSettings, updateSettings } from "./db.js";
 import {
   getAllCategories, getCategoryNames, getCategoryByName, createCategory, updateCategory, deleteCategory,
   getAllProducts, getProductById, getProductBySlug, getProductStock, createProduct, updateProduct, deleteProduct, consumeStock,
-  publicProduct,
+  publicProduct, publicProductListItem,
   getAllInvoices, getInvoiceById, createInvoice, updateInvoice, addInvoiceEvent, getPendingInvoices,
   getAllOrders, createOrder,
   getApprovedReviews, getReviewsByProduct, createReview,
@@ -34,7 +34,7 @@ function fileToDataUrl(file) {
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 5 * 1024 * 1024, fieldSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const allowed = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"];
     cb(null, allowed.includes(path.extname(file.originalname).toLowerCase()));
@@ -185,13 +185,13 @@ app.get("/api/products", async (req, res) => {
   const search = String(req.query.search || "").toLowerCase();
   const category = String(req.query.category || "");
   const sort = String(req.query.sort || "popular");
-  let products = (await getAllProducts()).map(publicProduct);
-  if (search) products = products.filter((p) => `${p.name} ${p.shortDescription}`.toLowerCase().includes(search));
+  let products = (await getAllProducts()).map(publicProductListItem);
+  if (search) products = products.filter((p) => p.name.toLowerCase().includes(search));
   if (category) products = products.filter((p) => p.category === category);
   if (req.query.maxPrice) products = products.filter((p) => p.price <= Number(req.query.maxPrice));
   if (sort === "newest") products = [...products].reverse();
   if (sort === "price-low") products = [...products].sort((a, b) => a.price - b.price);
-  if (sort === "popular") products = [...products].sort((a, b) => b.rating - a.rating);
+  if (sort === "popular") products = [...products].sort((a, b) => b.stockCount - a.stockCount);
   res.json(products);
 });
 
