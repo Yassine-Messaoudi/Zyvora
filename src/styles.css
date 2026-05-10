@@ -5,25 +5,25 @@
 
 :root {
   color-scheme: dark;
-  --bg-0: #020617; /* slate-950 */
-  --bg-1: #0f172a; /* slate-900 */
-  --bg-2: #1e293b; /* slate-800 */
-  --card: #0f172a;
-  --card-hover: #1e293b;
-  --line: rgba(255, 255, 255, 0.08);
-  --line-strong: rgba(255, 255, 255, 0.15);
-  --blue: #3b82f6; /* blue-500 */
-  --blue-hover: #60a5fa; /* blue-400 */
-  --text: #f8fafc; /* slate-50 */
-  --muted: #94a3b8; /* slate-400 */
+  --bg-0: #030712; /* deeper slate/black */
+  --bg-1: #090e1a; 
+  --bg-2: #0f172a; 
+  --card: rgba(15, 23, 42, 0.6);
+  --card-hover: rgba(30, 41, 59, 0.8);
+  --line: rgba(255, 255, 255, 0.06);
+  --line-strong: rgba(59, 130, 246, 0.3);
+  --blue: #3b82f6; 
+  --blue-hover: #60a5fa; 
+  --text: #f8fafc; 
+  --muted: #94a3b8; 
   --success: #10b981;
   --warning: #f59e0b;
   --error: #ef4444;
-  --radius-xl: 16px;
-  --radius-lg: 12px;
-  --radius-md: 8px;
-  --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  --shadow-glow: 0 0 20px rgba(59, 130, 246, 0.15);
+  --radius-xl: 20px;
+  --radius-lg: 16px;
+  --radius-md: 12px;
+  --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --shadow-glow: 0 0 24px rgba(59, 130, 246, 0.2);
 }
 
 * {
@@ -38,7 +38,11 @@ html {
 body {
   margin: 0;
   min-width: 320px;
-  background-color: var(--bg-0);
+  background: 
+    radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.08), transparent 25vw),
+    radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.05), transparent 25vw),
+    var(--bg-0);
+  background-attachment: fixed;
   color: var(--text);
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -129,8 +133,9 @@ button:disabled {
   top: 0;
   z-index: 40;
   border-bottom: 1px solid var(--line);
-  background-color: var(--bg-1);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  background: rgba(9, 14, 26, 0.85);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
 }
 
 .site-nav {
@@ -565,10 +570,16 @@ button:disabled {
 .order-card,
 .empty-state {
   border: 1px solid var(--line);
-  background-color: var(--card);
+  background: var(--card);
+  backdrop-filter: blur(12px);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-card);
-  transition: border-color 200ms ease, box-shadow 200ms ease;
+  transition: border-color 200ms ease, box-shadow 200ms ease, transform 200ms ease;
+}
+
+.feature-card:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-2px);
 }
 
 .feature-card {
@@ -2343,7 +2354,8 @@ button:disabled {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius-xl);
-  background-color: var(--card);
+  background: var(--card);
+  backdrop-filter: blur(12px);
   color: var(--text);
   font-family: Sora, Inter, sans-serif;
   font-size: clamp(1rem, 1.5vw, 1.2rem);
@@ -2372,7 +2384,8 @@ button:disabled {
 .landing-product-card {
   border-radius: var(--radius-xl);
   border: 1px solid var(--line);
-  background-color: var(--card);
+  background: var(--card);
+  backdrop-filter: blur(12px);
   box-shadow: var(--shadow-card);
   transition: border-color 200ms ease, box-shadow 200ms ease, transform 200ms ease;
 }
