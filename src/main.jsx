@@ -874,22 +874,22 @@ function CheckoutPage() {
 
 function InvoicePage({ invoiceId }) {
   const [invoice, setInvoice] = useState(null);
+  const [discordLink, setDiscordLink] = useState("");
   const [error, setError] = useState("");
   const [now, setNow] = useState(Date.now());
+  const [copied, setCopied] = useState("");
   useEffect(() => {
-    const load = () => api(`/invoices/${invoiceId}`).then(setInvoice).catch((err) => setError(err.message));
-    load();
-    const poll = setInterval(load, 5000);
+    api(`/invoices/${invoiceId}`).then(setInvoice).catch((err) => setError(err.message));
+    api("/settings/public").then((s) => setDiscordLink(s.discordInvite || "")).catch(() => {});
     const tick = setInterval(() => setNow(Date.now()), 1000);
-    return () => {
-      clearInterval(poll);
-      clearInterval(tick);
-    };
+    return () => clearInterval(tick);
   }, [invoiceId]);
   if (error) return <ErrorMessage message={error} />;
   if (!invoice) return <Loading />;
   const seconds = Math.max(0, Math.floor((new Date(invoice.expiresAt).getTime() - now) / 1000));
-  const simulate = () => api(`/invoices/${invoice.id}/simulate-payment`, { method: "POST", body: "{}" }).then(setInvoice);
+  const expired = invoice.status === "expired" || seconds <= 0;
+  const paid = invoice.status === "paid";
+  const copyText = (text, label) => { navigator.clipboard.writeText(text); setCopied(label); setTimeout(() => setCopied(""), 2000); };
   return (
     <section className="mx-auto max-w-6xl px-4 py-12">
       <SectionHeading eyebrow="Invoice" title={invoice.id} />
@@ -897,32 +897,60 @@ function InvoicePage({ invoiceId }) {
         <div className="invoice-panel">
           <StatusRail status={invoice.status} />
           <div className="mt-8 grid gap-4 md:grid-cols-2">
-            <DataTile label="Status" value={invoice.status} />
+            <DataTile label="Status" value={paid ? "Paid" : expired ? "Expired" : "Awaiting Payment"} />
             <DataTile label="Total USD" value={money(invoice.totalUsd)} />
-            <DataTile label="Selected coin" value={invoice.selectedCoin} />
-            <DataTile label="Confirmations" value={`${invoice.confirmationCount || 0}`} />
+            <DataTile label="Payment method" value={invoice.selectedCoin} />
+            <DataTile label="Invoice ID" value={invoice.id} />
           </div>
-          {invoice.qrCode && (
-            <div className="mt-8 grid gap-6 md:grid-cols-[280px_1fr]">
-              <img className="qr" src={invoice.qrCode} alt="Payment QR code" />
-              <div className="grid gap-4">
-                <CopyField label="Deposit address" value={invoice.depositAddress} />
-                <CopyField label="Exact amount" value={String(invoice.expectedCryptoAmount)} />
-                <CopyField label="QR data" value={invoice.qrCodeData} />
+          {invoice.depositAddress && !paid && !expired && (
+            <div className="mt-8">
+              <h3 className="text-lg font-bold text-white mb-4">Send Payment</h3>
+              <div className="grid gap-6 md:grid-cols-[280px_1fr]">
+                {invoice.qrCode && <img className="qr" src={invoice.qrCode} alt="Payment QR code" />}
+                <div className="grid gap-4">
+                  <CopyField label="Deposit address" value={invoice.depositAddress} />
+                  <CopyField label={`Exact ${invoice.selectedCoin} amount`} value={String(invoice.expectedCryptoAmount)} />
+                </div>
+              </div>
+              <div className="mt-6 rounded-lg border border-yellow-400/30 bg-yellow-400/10 p-4 text-sm text-yellow-200">
+                <strong>Important:</strong> Send the exact amount shown above to the deposit address. After sending payment, open a ticket in our Discord server with your Invoice ID to receive your order.
               </div>
             </div>
           )}
-          <div className="mt-8 rounded-lg border border-cyan-300/15 bg-cyan-300/5 p-4 text-sm text-slate-300">
-            Blockchain payments are matched by deposit address. The invoice ID stays in this store database and is linked to the unique address assigned above.
-          </div>
+          {!paid && !expired && discordLink && (
+            <a href={discordLink} target="_blank" rel="noopener noreferrer" className="primary-btn mt-6 w-full justify-center" style={{display:"flex",gap:"0.5rem",alignItems:"center",textDecoration:"none"}}>
+              <MessageCircle className="h-5 w-5" /> Open Discord — Create a Ticket
+            </a>
+          )}
+          {paid && (
+            <div className="mt-8 rounded-lg border border-green-400/30 bg-green-400/10 p-5 text-center">
+              <CheckCircle2 className="h-10 w-10 text-green-400 mx-auto" />
+              <p className="mt-3 text-lg font-bold text-green-300">Payment Confirmed!</p>
+              <p className="mt-1 text-sm text-slate-300">Your order has been processed. Check your email or dashboard for delivery details.</p>
+            </div>
+          )}
+          {expired && !paid && (
+            <div className="mt-8 rounded-lg border border-red-400/30 bg-red-400/10 p-5 text-center">
+              <AlertTriangle className="h-10 w-10 text-red-400 mx-auto" />
+              <p className="mt-3 text-lg font-bold text-red-300">Invoice Expired</p>
+              <p className="mt-1 text-sm text-slate-300">This invoice has expired. Please create a new order.</p>
+            </div>
+          )}
         </div>
         <aside className="summary-panel">
-          <Timer className="h-8 w-8 text-cyan-200" />
-          <p className="mt-4 text-sm text-slate-400">Expires in</p>
-          <p className="mt-1 text-4xl font-black text-white">
-            {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}
-          </p>
-          <div className="mt-6 grid gap-3">
+          {!paid && !expired && (
+            <>
+              <Timer className="h-8 w-8 text-cyan-200" />
+              <p className="mt-4 text-sm text-slate-400">Expires in</p>
+              <p className="mt-1 text-4xl font-black text-white">
+                {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}
+              </p>
+            </>
+          )}
+          {paid && <CheckCircle2 className="h-8 w-8 text-green-400" />}
+          {expired && !paid && <AlertTriangle className="h-8 w-8 text-red-400" />}
+          <p className="mt-4 text-sm text-slate-400">Order summary</p>
+          <div className="mt-3 grid gap-3">
             {invoice.items.map((item) => (
               <div className="flex justify-between gap-3 text-sm" key={item.productId}>
                 <span className="text-slate-300">{item.name} x{item.quantity}</span>
@@ -930,15 +958,19 @@ function InvoicePage({ invoiceId }) {
               </div>
             ))}
           </div>
-          {invoice.status !== "paid" && invoice.status !== "expired" && (
-            <button className="secondary-btn mt-6 w-full justify-center" onClick={simulate}>
-              Simulate Blockchain Payment
-            </button>
-          )}
-          {invoice.status === "paid" && (
+          <div className="mt-4 flex justify-between border-t border-cyan-300/10 pt-4">
+            <span className="font-bold text-white">Total</span>
+            <span className="text-xl font-black text-cyan-200">{money(invoice.totalUsd)}</span>
+          </div>
+          {paid && (
             <Link href={`/dashboard?invoiceId=${invoice.id}`} className="primary-btn mt-6 w-full justify-center">
               Open Dashboard
             </Link>
+          )}
+          {!paid && !expired && discordLink && (
+            <a href={discordLink} target="_blank" rel="noopener noreferrer" className="secondary-btn mt-4 w-full justify-center" style={{display:"flex",gap:"0.5rem",alignItems:"center",textDecoration:"none"}}>
+              <MessageCircle className="h-4 w-4" /> Open Discord
+            </a>
           )}
         </aside>
       </div>
@@ -947,14 +979,14 @@ function InvoicePage({ invoiceId }) {
 }
 
 function StatusRail({ status }) {
-  const steps = ["pending", "detected", "confirming", "paid"];
+  const steps = ["pending", "paid"];
   const index = steps.indexOf(status);
   return (
     <div className="status-rail">
       {steps.map((step, position) => (
         <div className={position <= index ? "status-step active" : "status-step"} key={step}>
           <span>{position + 1}</span>
-          <p>{step}</p>
+          <p>{step === "pending" ? "Awaiting Payment" : "Paid"}</p>
         </div>
       ))}
     </div>
@@ -1247,16 +1279,7 @@ function AdminContent({ section, data, headers, onChange }) {
     );
   }
   if (section === "settings") {
-    return (
-      <div className="admin-panel">
-        <h3 className="text-xl font-black text-white">Settings</h3>
-        <div className="mt-5 grid gap-3 md:grid-cols-2">
-          {Object.entries(data).map(([key, value]) => (
-            <DataTile key={key} label={key} value={typeof value === "object" ? JSON.stringify(value) : String(value)} />
-          ))}
-        </div>
-      </div>
-    );
+    return <AdminSettings data={data} headers={headers} onChange={onChange} />;
   }
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -1270,6 +1293,75 @@ function AdminContent({ section, data, headers, onChange }) {
           {data.lowStock.length ? data.lowStock.map((product) => <div className="table-row" key={product.id}><span>{product.name}</span><span>{product.stockCount} left</span></div>) : <p className="text-slate-400">No low stock alerts.</p>}
         </div>
       </div>
+    </div>
+  );
+}
+
+function AdminSettings({ data, headers, onChange }) {
+  const [form, setForm] = useState({
+    storeName: data.storeName || "Zyvora Market",
+    discordInvite: data.discordInvite || "",
+    ltcAddress: (data.walletAddresses || {}).LTC || "",
+    btcAddress: (data.walletAddresses || {}).BTC || "",
+    solAddress: (data.walletAddresses || {}).SOL || "",
+    ethAddress: (data.walletAddresses || {}).ETH || ""
+  });
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const save = async (e) => {
+    e.preventDefault();
+    setMessage(""); setError("");
+    try {
+      await api("/admin/settings", {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({
+          storeName: form.storeName,
+          discordInvite: form.discordInvite,
+          walletAddresses: {
+            LTC: form.ltcAddress,
+            BTC: form.btcAddress,
+            SOL: form.solAddress,
+            ETH: form.ethAddress
+          }
+        })
+      });
+      setMessage("Settings saved!");
+      onChange();
+    } catch (err) { setError(err.message); }
+  };
+  return (
+    <div className="admin-panel">
+      <div className="admin-panel-head">
+        <div>
+          <h3>Store Settings</h3>
+          <p>Configure your store name, Discord link, and crypto wallet addresses.</p>
+        </div>
+      </div>
+      {(message || error) && <AdminNotice message={message || error} tone={error ? "error" : "success"} />}
+      <form className="admin-form" onSubmit={save}>
+        <AdminField label="Store Name">
+          <input value={form.storeName} onChange={(e) => setForm({ ...form, storeName: e.target.value })} placeholder="Zyvora Market" />
+        </AdminField>
+        <AdminField label="Discord Invite Link">
+          <input value={form.discordInvite} onChange={(e) => setForm({ ...form, discordInvite: e.target.value })} placeholder="https://discord.gg/your-server" />
+        </AdminField>
+        <AdminField label="Litecoin (LTC) Address" wide>
+          <input value={form.ltcAddress} onChange={(e) => setForm({ ...form, ltcAddress: e.target.value })} placeholder="Your LTC wallet address" />
+        </AdminField>
+        <AdminField label="Bitcoin (BTC) Address" wide>
+          <input value={form.btcAddress} onChange={(e) => setForm({ ...form, btcAddress: e.target.value })} placeholder="Your BTC wallet address" />
+        </AdminField>
+        <AdminField label="Solana (SOL) Address" wide>
+          <input value={form.solAddress} onChange={(e) => setForm({ ...form, solAddress: e.target.value })} placeholder="Your SOL wallet address" />
+        </AdminField>
+        <AdminField label="Ethereum (ETH) Address" wide>
+          <input value={form.ethAddress} onChange={(e) => setForm({ ...form, ethAddress: e.target.value })} placeholder="Your ETH wallet address" />
+        </AdminField>
+        <div className="admin-form-actions">
+          <button className="primary-btn">Save Settings</button>
+        </div>
+      </form>
     </div>
   );
 }

@@ -205,12 +205,11 @@ export async function initDatabase() {
     const defaults = [
       ["storeName", process.env.STORE_NAME || "Zyvora Market"],
       ["discordInvite", process.env.DISCORD_INVITE || "https://discord.gg/your-server"],
-      ["paymentMode", process.env.PAYMENT_MODE || "mock"],
-      ["requiredConfirmations", JSON.stringify({
-        LTC: Number(process.env.REQUIRED_CONFIRMATIONS_LTC || 2),
-        BTC: Number(process.env.REQUIRED_CONFIRMATIONS_BTC || 2),
-        ETH: Number(process.env.REQUIRED_CONFIRMATIONS_ETH || 12),
-        SOL: Number(process.env.REQUIRED_CONFIRMATIONS_SOL || 1)
+      ["walletAddresses", JSON.stringify({
+        LTC: process.env.LTC_ADDRESS || "",
+        BTC: process.env.BTC_ADDRESS || "",
+        SOL: process.env.SOL_ADDRESS || "",
+        ETH: process.env.ETH_ADDRESS || ""
       })]
     ];
     for (const [key, value] of defaults) {

@@ -22,7 +22,7 @@ import {
   findOrCreateCustomer, getCustomerByEmail, updateCustomerLastOrder,
   getActiveCoupon, addActivityLog, addDeliveryLog, getAdminSummary
 } from "./store.js";
-import { assignDepositAddress, calculateCryptoAmount, checkBlockchain, createQrData, nextInvoiceStatus, supportedCoins } from "./payments.js";
+import { getWalletAddress, calculateCryptoAmount, createQrData, supportedCoins } from "./payments.js";
 import { sendDeliveryEmail, sendDiscordWebhook } from "./delivery.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -138,25 +138,12 @@ async function completeInvoice(invoice) {
   await sendDiscordWebhook("Payment confirmed", { invoice: invoice.id, order: orderId, total: `$${invoice.totalUsd}` });
 }
 
-async function inspectInvoices() {
-  const settings = await getSettings();
+async function expireOldInvoices() {
   const pending = await getPendingInvoices();
   for (const invoice of pending) {
-    const required = (settings.requiredConfirmations || {})[invoice.selectedCoin] || 2;
-    const chain = await checkBlockchain(invoice);
-    if (chain.status === "detected" && invoice.status === "pending") {
-      const txId = invoice.transactionId || `mock_${randomUUID().replace(/-/g, "").slice(0, 18)}`;
-      await updateInvoice(invoice.id, { status: "detected", detectedAt: new Date().toISOString(), transactionId: txId });
-      await addInvoiceEvent(invoice.id, "detected");
-      await sendDiscordWebhook("Payment detected", { invoice: invoice.id, coin: invoice.selectedCoin, amount: invoice.expectedCryptoAmount });
-    }
-    const next = nextInvoiceStatus(invoice, required);
-    if (next.status !== invoice.status || next.confirmationCount !== invoice.confirmationCount) {
-      await updateInvoice(invoice.id, { status: next.status, confirmationCount: next.confirmationCount });
-    }
-    if (next.status === "paid") {
-      const fresh = await getInvoiceById(invoice.id);
-      await completeInvoice(fresh);
+    if (new Date(invoice.expiresAt).getTime() < Date.now() && !["paid", "expired"].includes(invoice.status)) {
+      await updateInvoice(invoice.id, { status: "expired" });
+      await addInvoiceEvent(invoice.id, "expired");
     }
   }
 }
@@ -166,8 +153,8 @@ async function inspectInvoices() {
 await initDatabase();
 
 setInterval(() => {
-  inspectInvoices().catch((error) => console.error("invoice inspection failed", error));
-}, 10_000);
+  expireOldInvoices().catch((error) => console.error("invoice expiry check failed", error));
+}, 30_000);
 
 // ── Public routes ──
 
@@ -228,9 +215,9 @@ app.post("/api/invoices", checkoutLimiter, async (req, res) => {
     let qrCodeData = null;
     let qrCode = null;
     if (["LTC", "BTC", "SOL", "ETH"].includes(parsed.data.paymentMethod)) {
-      const allInvoices = await getAllInvoices();
+      const settings = await getSettings();
+      depositAddress = getWalletAddress(settings, parsed.data.paymentMethod);
       expectedCryptoAmount = calculateCryptoAmount(totalUsd, parsed.data.paymentMethod);
-      depositAddress = assignDepositAddress(allInvoices, parsed.data.paymentMethod);
       const qr = await createQrData(parsed.data.paymentMethod, depositAddress, expectedCryptoAmount, id);
       qrCodeData = qr.data;
       qrCode = qr.qrCode;
@@ -253,7 +240,7 @@ app.post("/api/invoices", checkoutLimiter, async (req, res) => {
       qrCode,
       transactionId: null,
       confirmationCount: 0,
-      mockDetected: false,
+      mockDetected: 0,
       status: parsed.data.paymentMethod === "BALANCE" ? "paid" : "pending",
       createdAt: createdAt.toISOString(),
       expiresAt: new Date(createdAt.getTime() + 15 * 60 * 1000).toISOString()
@@ -274,14 +261,9 @@ app.get("/api/invoices/:id", async (req, res) => {
   res.json(invoice);
 });
 
-app.post("/api/invoices/:id/simulate-payment", async (req, res) => {
-  const invoice = await getInvoiceById(req.params.id);
-  if (!invoice) return res.status(404).json({ error: "Invoice not found" });
-  if (!["pending", "detected", "confirming"].includes(invoice.status)) return res.json(invoice);
-  const txId = invoice.transactionId || `mock_${randomUUID().replace(/-/g, "").slice(0, 18)}`;
-  const updated = await updateInvoice(invoice.id, { mockDetected: true, transactionId: txId, status: "detected" });
-  await addInvoiceEvent(invoice.id, "mock_payment_detected");
-  res.json(updated);
+app.get("/api/settings/public", async (_req, res) => {
+  const settings = await getSettings();
+  res.json({ discordInvite: settings.discordInvite || "https://discord.gg/your-server" });
 });
 
 app.get("/api/dashboard", async (req, res) => {
@@ -446,10 +428,8 @@ app.get("/api/admin/invoices", auth, async (_req, res) => {
 app.post("/api/admin/invoices/:id/mark-paid", auth, async (req, res) => {
   const invoice = await getInvoiceById(req.params.id);
   if (!invoice) return res.status(404).json({ error: "Invoice not found" });
-  const settings = await getSettings();
   const txId = invoice.transactionId || `manual_${Date.now().toString(36)}`;
-  const confirmations = (settings.requiredConfirmations || {})[invoice.selectedCoin] || 1;
-  await updateInvoice(invoice.id, { status: "paid", transactionId: txId, confirmationCount: confirmations });
+  await updateInvoice(invoice.id, { status: "paid", transactionId: txId, confirmationCount: 1 });
   const fresh = await getInvoiceById(invoice.id);
   await completeInvoice(fresh);
   res.json(fresh);
