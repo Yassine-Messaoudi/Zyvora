@@ -8,7 +8,7 @@ import jwt from "jsonwebtoken";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-
+import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import multer from "multer";
 import { initDatabase, getSettings, updateSettings } from "./db.js";
