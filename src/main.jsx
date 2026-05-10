@@ -779,12 +779,39 @@ function CartPage() {
   );
 }
 
+function StepTabs({ step }) {
+  const tabs = ["Order Information", "Confirm & Pay", "Receive Your Items"];
+  return (
+    <div className="step-tabs">
+      {tabs.map((label, i) => (
+        <div key={label} className={`step-tab ${i <= step ? "active" : ""} ${i === step ? "current" : ""}`}>
+          <span>{label}</span>
+          {i < step && <CheckCircle2 className="h-4 w-4" />}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const paymentMethods = [
+  { value: "LTC", label: "Litecoin", sub: "via Litecoin Network", color: "#345D9D", icon: "Ł" },
+  { value: "BTC", label: "Bitcoin", sub: "via Bitcoin Network", color: "#F7931A", icon: "₿", tag: "+5%" },
+  { value: "SOL", label: "Solana", sub: "via Solana Network", color: "#9945FF", icon: "◎" },
+  { value: "ETH", label: "Ethereum", sub: "via Ethereum Network", color: "#627EEA", icon: "Ξ" },
+  { value: "BALANCE", label: "Customer Balance", sub: "Click to authenticate", color: "#334155", icon: "◉" },
+  { value: "PAYPAL_FF", label: "PayPal (Friends & Family)", sub: "via PayPal", color: "#003087", icon: "P" }
+];
+
 function CheckoutPage() {
   const cart = useCart();
   const route = useRouteContext();
   const [form, setForm] = useState({ email: "", discord: "", couponCode: "", paymentMethod: "LTC", agreedToTerms: false, newsletter: false });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [discordLink, setDiscordLink] = useState("");
+  useEffect(() => {
+    api("/settings/public").then((s) => setDiscordLink(s.discordInvite || "")).catch(() => {});
+  }, []);
   const submit = async (event) => {
     event.preventDefault();
     setError("");
@@ -807,66 +834,90 @@ function CheckoutPage() {
   };
   if (!cart.items.length) return <CartPage />;
   return (
-    <section className="mx-auto max-w-6xl px-4 py-12">
-      <SectionHeading eyebrow="Secure" title="Checkout" />
-      <form className="mt-8 grid gap-6 lg:grid-cols-[1fr_380px]" onSubmit={submit}>
-        <div className="checkout-panel">
-          <label className="field">
-            <span>Email address</span>
-            <input required type="text" inputMode="email" autoComplete="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
-          </label>
-          <label className="field">
-            <span>Discord username or ID</span>
-            <input value={form.discord} onChange={(event) => setForm({ ...form, discord: event.target.value })} />
-          </label>
-          <label className="field">
-            <span>Coupon code</span>
-            <input value={form.couponCode} onChange={(event) => setForm({ ...form, couponCode: event.target.value })} placeholder="LAUNCH10" />
-          </label>
-          <div>
-            <p className="mb-3 text-sm font-bold text-white">Payment method</p>
-            <div className="payment-grid">
-              {[
-                ["LTC", "Litecoin"],
-                ["BTC", "Bitcoin"],
-                ["SOL", "Solana"],
-                ["ETH", "Ethereum"],
-                ["PAYPAL_FF", "PayPal F&F"],
-                ["BALANCE", "Customer balance"]
-              ].map(([value, label]) => (
-                <label className={form.paymentMethod === value ? "payment active" : "payment"} key={value}>
-                  <input type="radio" checked={form.paymentMethod === value} onChange={() => setForm({ ...form, paymentMethod: value })} />
-                  <Wallet className="h-5 w-5" />
-                  <span>{label}</span>
+    <section className="mx-auto max-w-7xl px-4 py-8">
+      <StepTabs step={0} />
+      <form className="mt-8 grid gap-6 lg:grid-cols-[340px_1fr]" onSubmit={submit}>
+        <aside className="co-sidebar">
+          <div className="co-sidebar-head">
+            <div className="co-logo-row"><Zap className="h-5 w-5 text-cyan-300" /><span className="font-bold text-white">ZYVORA</span></div>
+          </div>
+          <p className="co-pay-label">PAY ZYVORA</p>
+          <p className="co-total">{money(cart.total)}</p>
+          <div className="co-items">
+            {cart.items.map((item) => (
+              <div className="co-item" key={item.productId}>
+                {item.image && <img src={item.image} alt={item.name} className="co-item-img" />}
+                <div className="co-item-info">
+                  <p className="co-item-name">{item.name} <span className="co-item-qty">x{item.quantity}</span></p>
+                </div>
+                <span className="co-item-price">{money(item.price * item.quantity)}</span>
+              </div>
+            ))}
+          </div>
+          <div className="co-subtotals">
+            <div className="co-row"><span>Subtotal</span><span>{money(cart.total)}</span></div>
+            <div className="co-row co-row-total"><span>Total</span><span>{money(cart.total)}</span></div>
+          </div>
+          <div className="co-support">
+            <p className="co-support-title">Having issues with your order?</p>
+            <p className="co-support-text">You can Open a Ticket on your Customer Dashboard to receive assistance from our support team.</p>
+            {discordLink && (
+              <a href={discordLink} target="_blank" rel="noopener noreferrer" className="co-support-link">
+                Open a Support Ticket <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            )}
+          </div>
+        </aside>
+        <div className="co-form-area">
+          <div className="co-section">
+            <p className="co-section-label">CONTACT & DELIVERY</p>
+            <label className="co-field">
+              <input required type="text" inputMode="email" autoComplete="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="E-mail Address *" />
+            </label>
+            <label className="co-field mt-3">
+              <input value={form.discord} onChange={(e) => setForm({ ...form, discord: e.target.value })} placeholder="Discord username or ID" />
+            </label>
+          </div>
+          <div className="co-section">
+            <p className="co-section-label">DISCOUNT</p>
+            <div className="co-coupon-row">
+              <input value={form.couponCode} onChange={(e) => setForm({ ...form, couponCode: e.target.value })} placeholder="Coupon Code" className="co-coupon-input" />
+              <button type="button" className="co-coupon-btn">Apply <span className="co-arrow">→</span></button>
+            </div>
+          </div>
+          <div className="co-section">
+            <div className="co-payment-head">
+              <p className="co-section-label">PAYMENT</p>
+              <p className="co-secure-note"><Lock className="h-3.5 w-3.5" /> All transactions are secure and encrypted.</p>
+            </div>
+            <div className="co-payment-grid">
+              {paymentMethods.map((pm) => (
+                <label key={pm.value} className={`co-pay-option ${form.paymentMethod === pm.value ? "active" : ""}`} onClick={() => setForm({ ...form, paymentMethod: pm.value })}>
+                  <input type="radio" name="paymentMethod" checked={form.paymentMethod === pm.value} onChange={() => {}} className="hidden" />
+                  <span className="co-pay-icon" style={{ background: pm.color }}>{pm.icon}</span>
+                  <div className="co-pay-text">
+                    <span className="co-pay-name">{pm.label}</span>
+                    <span className="co-pay-sub">{pm.sub}</span>
+                  </div>
+                  {pm.tag && <span className="co-pay-tag">{pm.tag}</span>}
+                  {form.paymentMethod === pm.value && <span className="co-pay-check"><CheckCircle2 className="h-4 w-4" /></span>}
                 </label>
               ))}
             </div>
           </div>
-          <label className="check-row">
-            <input required type="checkbox" checked={form.agreedToTerms} onChange={(event) => setForm({ ...form, agreedToTerms: event.target.checked })} />
-            <span>I agree to the Terms of Service.</span>
+          <label className="co-check">
+            <input required type="checkbox" checked={form.agreedToTerms} onChange={(e) => setForm({ ...form, agreedToTerms: e.target.checked })} />
+            <span>I have read and agree to Zyvora's Terms of Service.</span>
           </label>
-          <label className="check-row">
-            <input type="checkbox" checked={form.newsletter} onChange={(event) => setForm({ ...form, newsletter: event.target.checked })} />
-            <span>Send me restock and product alerts.</span>
+          <label className="co-check">
+            <input type="checkbox" checked={form.newsletter} onChange={(e) => setForm({ ...form, newsletter: e.target.checked })} />
+            <span>I would like to receive updates and promotions from Zyvora.</span>
           </label>
-          {error && <div className="error-box">{error}</div>}
-        </div>
-        <aside className="summary-panel">
-          <p className="text-sm text-slate-400">Order total</p>
-          <p className="mt-2 text-4xl font-black text-white">{money(cart.total)}</p>
-          <div className="mt-6 grid gap-3">
-            {cart.items.map((item) => (
-              <div className="flex justify-between gap-3 text-sm" key={item.productId}>
-                <span className="text-slate-300">{item.name} x{item.quantity}</span>
-                <span className="text-white">{money(item.price * item.quantity)}</span>
-              </div>
-            ))}
-          </div>
-          <button className="primary-btn mt-6 w-full justify-center" disabled={loading}>
-            {loading ? "Creating invoice..." : "Create Invoice"}
+          {error && <div className="error-box mt-2">{error}</div>}
+          <button className="co-proceed-btn" disabled={loading}>
+            {loading ? "Processing..." : "Proceed to Payment"} <span className="co-arrow">→</span>
           </button>
-        </aside>
+        </div>
       </form>
     </section>
   );
@@ -889,107 +940,104 @@ function InvoicePage({ invoiceId }) {
   const seconds = Math.max(0, Math.floor((new Date(invoice.expiresAt).getTime() - now) / 1000));
   const expired = invoice.status === "expired" || seconds <= 0;
   const paid = invoice.status === "paid";
+  const coinLabel = paymentMethods.find((p) => p.value === invoice.selectedCoin)?.label || invoice.selectedCoin;
+  const coinIcon = paymentMethods.find((p) => p.value === invoice.selectedCoin)?.icon || "";
+  const coinColor = paymentMethods.find((p) => p.value === invoice.selectedCoin)?.color || "#345D9D";
+  const shortAddr = invoice.depositAddress ? `${invoice.depositAddress.slice(0, 8)}...${invoice.depositAddress.slice(-6)}` : "";
   const copyText = (text, label) => { navigator.clipboard.writeText(text); setCopied(label); setTimeout(() => setCopied(""), 2000); };
+  const createdAgo = () => { const diff = Math.floor((now - new Date(invoice.createdAt).getTime()) / 1000); return diff < 60 ? `${diff} seconds ago` : `${Math.floor(diff / 60)} minutes ago`; };
+  const expiresIn = () => { if (expired) return "Expired"; const m = Math.floor(seconds / 60); return m > 60 ? `in ${Math.floor(m / 60)} hours` : `in ${m} minutes`; };
+
   return (
-    <section className="mx-auto max-w-6xl px-4 py-12">
-      <SectionHeading eyebrow="Invoice" title={invoice.id} />
-      <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_380px]">
-        <div className="invoice-panel">
-          <StatusRail status={invoice.status} />
-          <div className="mt-8 grid gap-4 md:grid-cols-2">
-            <DataTile label="Status" value={paid ? "Paid" : expired ? "Expired" : "Awaiting Payment"} />
-            <DataTile label="Total USD" value={money(invoice.totalUsd)} />
-            <DataTile label="Payment method" value={invoice.selectedCoin} />
-            <DataTile label="Invoice ID" value={invoice.id} />
-          </div>
-          {invoice.depositAddress && !paid && !expired && (
-            <div className="mt-8">
-              <h3 className="text-lg font-bold text-white mb-4">Send Payment</h3>
-              <div className="grid gap-6 md:grid-cols-[280px_1fr]">
-                {invoice.qrCode && <img className="qr" src={invoice.qrCode} alt="Payment QR code" />}
-                <div className="grid gap-4">
-                  <CopyField label="Deposit address" value={invoice.depositAddress} />
-                  <CopyField label={`Exact ${invoice.selectedCoin} amount`} value={String(invoice.expectedCryptoAmount)} />
-                </div>
-              </div>
-              <div className="mt-6 rounded-lg border border-yellow-400/30 bg-yellow-400/10 p-4 text-sm text-yellow-200">
-                <strong>Important:</strong> Send the exact amount shown above to the deposit address. After sending payment, open a ticket in our Discord server with your Invoice ID to receive your order.
+    <section className="mx-auto max-w-4xl px-4 py-8">
+      <StepTabs step={paid ? 2 : 1} />
+      {paid && (
+        <div className="inv-paid-banner">
+          <CheckCircle2 className="h-12 w-12 text-green-400" />
+          <h2>Payment Confirmed!</h2>
+          <p>Your order has been processed. Check your dashboard for delivery details.</p>
+          <Link href={`/dashboard?invoiceId=${invoice.id}`} className="co-proceed-btn" style={{maxWidth:"320px",margin:"1rem auto 0"}}>
+            Open Dashboard <span className="co-arrow">→</span>
+          </Link>
+        </div>
+      )}
+      {expired && !paid && (
+        <div className="inv-expired-banner">
+          <AlertTriangle className="h-12 w-12 text-red-400" />
+          <h2>Invoice Expired</h2>
+          <p>This invoice has expired. Please create a new order.</p>
+          <Link href="/products" className="co-proceed-btn" style={{maxWidth:"320px",margin:"1rem auto 0"}}>
+            Browse Products <span className="co-arrow">→</span>
+          </Link>
+        </div>
+      )}
+      {!paid && !expired && invoice.depositAddress && (
+        <div className="inv-pay-card">
+          <div className="inv-pay-header">
+            <div className="inv-pay-coin">
+              <span className="co-pay-icon" style={{ background: coinColor }}>{coinIcon}</span>
+              <div>
+                <p className="inv-pay-coin-label">{invoice.selectedCoin} Payment</p>
+                <p className="inv-pay-coin-addr">{shortAddr}</p>
               </div>
             </div>
+            <p className="inv-pay-amount-top">{invoice.expectedCryptoAmount} {invoice.selectedCoin}</p>
+          </div>
+          {invoice.qrCode && (
+            <div className="inv-qr-wrap">
+              <img src={invoice.qrCode} alt="Payment QR code" className="inv-qr" />
+            </div>
           )}
-          {!paid && !expired && discordLink && (
-            <a href={discordLink} target="_blank" rel="noopener noreferrer" className="primary-btn mt-6 w-full justify-center" style={{display:"flex",gap:"0.5rem",alignItems:"center",textDecoration:"none"}}>
+          <div className="inv-addr-row">
+            <span className="inv-addr-label">Address:</span>
+            <span className="inv-addr-value">{invoice.depositAddress}</span>
+            <button className="inv-copy-btn" onClick={() => copyText(invoice.depositAddress, "addr")} title="Copy address">
+              {copied === "addr" ? <CheckCircle2 className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
+            </button>
+          </div>
+          {invoice.qrCodeData && (
+            <a href={invoice.qrCodeData} className="inv-open-wallet-btn">
+              Open Wallet <ExternalLink className="h-4 w-4" />
+            </a>
+          )}
+          <div className="inv-exact-amount">
+            <p className="inv-exact-label">SEND EXACT AMOUNT</p>
+            <div className="inv-exact-row">
+              <span className="inv-exact-value">{invoice.expectedCryptoAmount} {invoice.selectedCoin}</span>
+              <button className="inv-copy-btn" onClick={() => copyText(String(invoice.expectedCryptoAmount), "amount")} title="Copy amount">
+                {copied === "amount" ? <CheckCircle2 className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+          <div className="inv-how-to-pay">
+            <p className="inv-how-label">HOW TO PAY</p>
+            <div className="inv-step"><span className="inv-step-num">1</span><span>Send {invoice.expectedCryptoAmount} {invoice.selectedCoin} to the address above</span></div>
+            <div className="inv-step"><span className="inv-step-num">2</span><span>After sending, open a ticket on our Discord with your Invoice ID</span></div>
+            <div className="inv-step"><span className="inv-step-num">3</span><span>Send only {invoice.selectedCoin} to this address. Other cryptocurrencies will be lost.</span></div>
+          </div>
+          <div className="inv-waiting">
+            <span className="inv-waiting-dot"></span>
+            Waiting for payment. Open a Discord ticket after sending.
+          </div>
+          {discordLink && (
+            <a href={discordLink} target="_blank" rel="noopener noreferrer" className="inv-discord-btn">
               <MessageCircle className="h-5 w-5" /> Open Discord — Create a Ticket
             </a>
           )}
-          {paid && (
-            <div className="mt-8 rounded-lg border border-green-400/30 bg-green-400/10 p-5 text-center">
-              <CheckCircle2 className="h-10 w-10 text-green-400 mx-auto" />
-              <p className="mt-3 text-lg font-bold text-green-300">Payment Confirmed!</p>
-              <p className="mt-1 text-sm text-slate-300">Your order has been processed. Check your email or dashboard for delivery details.</p>
-            </div>
-          )}
-          {expired && !paid && (
-            <div className="mt-8 rounded-lg border border-red-400/30 bg-red-400/10 p-5 text-center">
-              <AlertTriangle className="h-10 w-10 text-red-400 mx-auto" />
-              <p className="mt-3 text-lg font-bold text-red-300">Invoice Expired</p>
-              <p className="mt-1 text-sm text-slate-300">This invoice has expired. Please create a new order.</p>
-            </div>
-          )}
         </div>
-        <aside className="summary-panel">
-          {!paid && !expired && (
-            <>
-              <Timer className="h-8 w-8 text-cyan-200" />
-              <p className="mt-4 text-sm text-slate-400">Expires in</p>
-              <p className="mt-1 text-4xl font-black text-white">
-                {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}
-              </p>
-            </>
-          )}
-          {paid && <CheckCircle2 className="h-8 w-8 text-green-400" />}
-          {expired && !paid && <AlertTriangle className="h-8 w-8 text-red-400" />}
-          <p className="mt-4 text-sm text-slate-400">Order summary</p>
-          <div className="mt-3 grid gap-3">
-            {invoice.items.map((item) => (
-              <div className="flex justify-between gap-3 text-sm" key={item.productId}>
-                <span className="text-slate-300">{item.name} x{item.quantity}</span>
-                <span className="text-white">{money(item.lineTotal)}</span>
-              </div>
-            ))}
-          </div>
-          <div className="mt-4 flex justify-between border-t border-cyan-300/10 pt-4">
-            <span className="font-bold text-white">Total</span>
-            <span className="text-xl font-black text-cyan-200">{money(invoice.totalUsd)}</span>
-          </div>
-          {paid && (
-            <Link href={`/dashboard?invoiceId=${invoice.id}`} className="primary-btn mt-6 w-full justify-center">
-              Open Dashboard
-            </Link>
-          )}
-          {!paid && !expired && discordLink && (
-            <a href={discordLink} target="_blank" rel="noopener noreferrer" className="secondary-btn mt-4 w-full justify-center" style={{display:"flex",gap:"0.5rem",alignItems:"center",textDecoration:"none"}}>
-              <MessageCircle className="h-4 w-4" /> Open Discord
-            </a>
-          )}
-        </aside>
+      )}
+      <div className="inv-info-table">
+        <p className="inv-info-title">ORDER INFORMATION</p>
+        <div className="inv-info-row"><span>Invoice ID</span><span className="inv-info-val">{invoice.id} <button className="inv-copy-btn" onClick={() => copyText(invoice.id, "id")}>{copied === "id" ? <CheckCircle2 className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}</button></span></div>
+        <div className="inv-info-row"><span>Payment Method</span><span className="inv-info-val">{coinLabel} <span className="co-pay-icon" style={{ background: coinColor, width: "22px", height: "22px", fontSize: "11px" }}>{coinIcon}</span></span></div>
+        <div className="inv-info-row"><span>E-mail Address</span><span className="inv-info-val">{invoice.customerEmail}</span></div>
+        {invoice.discord && <div className="inv-info-row"><span>Discord</span><span className="inv-info-val">{invoice.discord}</span></div>}
+        <div className="inv-info-row"><span>Total Price</span><span className="inv-info-val">{money(invoice.totalUsd)}</span></div>
+        {invoice.expectedCryptoAmount && <div className="inv-info-row"><span>Total Amount ({invoice.selectedCoin})</span><span className="inv-info-val">{invoice.expectedCryptoAmount} {invoice.selectedCoin}</span></div>}
+        <div className="inv-info-row"><span>Created</span><span className="inv-info-val">{createdAgo()}</span></div>
+        <div className="inv-info-row"><span>Expires</span><span className="inv-info-val">{expiresIn()}</span></div>
       </div>
     </section>
-  );
-}
-
-function StatusRail({ status }) {
-  const steps = ["pending", "paid"];
-  const index = steps.indexOf(status);
-  return (
-    <div className="status-rail">
-      {steps.map((step, position) => (
-        <div className={position <= index ? "status-step active" : "status-step"} key={step}>
-          <span>{position + 1}</span>
-          <p>{step === "pending" ? "Awaiting Payment" : "Paid"}</p>
-        </div>
-      ))}
-    </div>
   );
 }
 
