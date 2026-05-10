@@ -215,7 +215,7 @@ function Shell({ children }) {
         <div className="site-nav">
           <Link href="/" className="brand-lockup">
             <span className="brand-mark">
-              <Zap className="h-5 w-5 text-cyan-200" />
+              <img src="/images/zyvola-logo.png" alt="ZYVORA logo" />
             </span>
             <span>
               <span className="brand-name">ZYVORA</span>
@@ -442,37 +442,20 @@ function SectionHeading({ eyebrow, title, text }) {
 }
 
 function ProductCard({ product, onAdd }) {
+  const inStock = product.stockCount > 0;
   return (
     <motion.article className="product-card premium-hover" whileHover={{ y: -7 }} transition={{ duration: 0.18 }}>
       <Link href={`/products/${product.slug}`} className="block">
         <div className="product-image">
-          <img src={product.image} alt={product.name} />
-          <span>{product.badge}</span>
+          {product.image ? <img src={product.image} alt={product.name} /> : <div className="product-image-placeholder"><Package className="h-10 w-10 text-slate-600" /></div>}
+          {product.badge && <span>{product.badge}</span>}
         </div>
       </Link>
       <div className="product-content">
-        <div className="flex items-center justify-between gap-3">
-          <p className="product-category">{product.category}</p>
-          <Stars rating={product.rating} compact />
-        </div>
         <h3>{product.name}</h3>
-        <p>{product.shortDescription}</p>
         <div className="product-buy-row">
-          <div>
-            <strong>{money(product.price)}</strong>
-            <span className={product.stockCount > 0 ? "stock in-stock" : "stock out-stock"}>{product.stockStatus}</span>
-          </div>
-          <button className="icon-btn" onClick={onAdd} aria-label={`Add ${product.name} to cart`}>
-            <ShoppingCart className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="product-actions">
-          <Link href={`/products/${product.slug}`} className="small-btn">
-            View Product
-          </Link>
-          <button className="small-btn accent" onClick={onAdd}>
-            Add to Cart
-          </button>
+          <strong className="text-cyan-200">{money(product.price)}</strong>
+          <span className={`stock-badge ${inStock ? "in" : "out"}`}>{inStock ? `${product.stockCount} in stock` : "Out of stock"}</span>
         </div>
       </div>
     </motion.article>
@@ -493,55 +476,47 @@ function ProductsPage() {
   const query = new URLSearchParams(route.search);
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [filters, setFilters] = useState({
-    search: query.get("search") || "",
-    category: query.get("category") || "",
-    maxPrice: query.get("maxPrice") || "",
-    sort: query.get("sort") || "popular"
-  });
+  const [search, setSearch] = useState(query.get("search") || "");
+  const [activeCategory, setActiveCategory] = useState(query.get("category") || "");
   const cart = useCart();
   useEffect(() => {
     api("/categories").then(setCategories);
   }, []);
   useEffect(() => {
     const params = new URLSearchParams();
-    Object.entries(filters).forEach(([key, value]) => value && params.set(key, value));
+    if (search) params.set("search", search);
+    if (activeCategory) params.set("category", activeCategory);
     api(`/products?${params}`).then(setProducts);
-  }, [filters]);
+  }, [search, activeCategory]);
+  const catNames = categories.map((c) => c.name || c);
   return (
     <section className="mx-auto max-w-7xl px-4 py-12">
-      <SectionHeading eyebrow="Storefront" title="Products" />
-      <div className="filters mt-8">
-        <label>
-          <Search className="h-4 w-4" />
-          <input value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} placeholder="Search products" />
-        </label>
-        <label>
-          <Filter className="h-4 w-4" />
-          <select value={filters.category} onChange={(event) => setFilters({ ...filters, category: event.target.value })}>
-            <option value="">All categories</option>
-            {categories.map((cat) => (
-              <option key={cat.id || cat} value={cat.name || cat}>{cat.name || cat}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <BadgeDollarSign className="h-4 w-4" />
-          <input type="number" value={filters.maxPrice} onChange={(event) => setFilters({ ...filters, maxPrice: event.target.value })} placeholder="Max price" />
-        </label>
-        <label>
-          <BarChart3 className="h-4 w-4" />
-          <select value={filters.sort} onChange={(event) => setFilters({ ...filters, sort: event.target.value })}>
-            <option value="popular">Popular</option>
-            <option value="newest">Newest</option>
-            <option value="price-low">Price low</option>
-          </select>
-        </label>
+      <div className="products-search-bar">
+        <span className="text-xs font-bold uppercase tracking-widest text-cyan-200">Keyword</span>
+        <div className="search-input-wrap">
+          <Search className="h-4 w-4 text-slate-400" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search products..." />
+        </div>
+      </div>
+      <div className="category-pills-section mt-6">
+        <span className="text-xs font-bold uppercase tracking-widest text-cyan-200">Category</span>
+        <div className="category-pills mt-2">
+          <button className={`cat-pill ${activeCategory === "" ? "active" : ""}`} onClick={() => setActiveCategory("")}>All</button>
+          {catNames.map((name) => (
+            <button key={name} className={`cat-pill ${activeCategory === name ? "active" : ""}`} onClick={() => setActiveCategory(name)}>{name}</button>
+          ))}
+        </div>
       </div>
       <div className="product-grid mt-8">
         {products.map((product) => (
           <ProductCard key={product.id} product={product} onAdd={() => cart.add(product)} />
         ))}
+        {products.length === 0 && (
+          <div className="empty-state col-span-full">
+            <Package className="h-8 w-8 text-cyan-200" />
+            <p>No products found{activeCategory ? ` in "${activeCategory}"` : ""}.</p>
+          </div>
+        )}
       </div>
     </section>
   );
@@ -549,41 +524,95 @@ function ProductsPage() {
 
 function ProductDetail({ slug }) {
   const [product, setProduct] = useState(null);
+  const [qty, setQty] = useState(1);
   const cart = useCart();
+  const route = useRouteContext();
+  const navigate = route.navigate;
   useEffect(() => {
     api(`/products/${slug}`).then(setProduct).catch(() => setProduct(false));
   }, [slug]);
   if (product === false) return <NotFound />;
   if (!product) return <Loading />;
+  const inStock = product.stockCount > 0;
+  const specs = [];
+  if (product.stockType) specs.push(["Product Type", product.stockType.replace(/_/g, " ")]);
+  if (product.requirements?.length) specs.push(["Compatibility", product.requirements.join(", ")]);
+  if (product.deliveryType) specs.push(["Delivery", product.deliveryType]);
+  specs.push(["Stock", inStock ? `${product.stockCount} in stock` : "Out of stock"]);
+  const total = (product.price * qty).toFixed(2);
   return (
     <section className="mx-auto max-w-7xl px-4 py-12">
-      <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr]">
+      <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
         <div>
           <div className="detail-image">
-            <img src={product.image} alt={product.name} />
+            {product.image ? <img src={product.image} alt={product.name} /> : <div className="h-64 flex items-center justify-center bg-[var(--card)]"><Package className="h-16 w-16 text-slate-600" /></div>}
           </div>
-          <div className="mt-4 grid grid-cols-3 gap-3">
-            {[product.image, product.image, product.image].map((image, index) => (
-              <img className="thumb" src={image} alt={`${product.name} gallery ${index + 1}`} key={index} />
-            ))}
+          {product.image && (
+            <div className="mt-4 grid grid-cols-4 gap-3">
+              {[product.image].map((image, index) => (
+                <img className="thumb" src={image} alt={`${product.name} ${index + 1}`} key={index} />
+              ))}
+            </div>
+          )}
+          <div className="product-rich-content mt-8">
+            {product.shortDescription && <p className="text-lg leading-8 text-slate-300">{product.shortDescription}</p>}
+            {product.description && (
+              <div className="mt-6 text-slate-300 leading-7 whitespace-pre-line">{product.description}</div>
+            )}
+            {product.features?.length > 0 && (
+              <div className="mt-8">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2"><Zap className="h-5 w-5 text-cyan-200" /> Key Features</h3>
+                <ul className="feature-list mt-3">
+                  {product.features.map((f) => <li key={f}><CheckCircle2 className="h-4 w-4 text-cyan-300 shrink-0" /><span>{f}</span></li>)}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
         <div>
-          <p className="text-cyan-200">{product.category}</p>
-          <h1 className="mt-2 text-4xl font-black text-white sm:text-5xl">{product.name}</h1>
-          <div className="mt-4 flex flex-wrap items-center gap-4">
-            <Stars rating={product.rating} />
-            <span className="pill">{product.stockStatus}</span>
-            <span className="pill">{product.deliveryType}</span>
+          <div className="flex flex-wrap gap-2">
+            <span className="pill accent"><Rocket className="h-3.5 w-3.5" /> {product.deliveryType || "Instant Delivery"}</span>
           </div>
-          <p className="mt-6 text-4xl font-black text-white">{money(product.price)}</p>
-          <p className="mt-5 text-lg leading-8 text-slate-300">{product.description}</p>
-          <button className="primary-btn mt-8" onClick={() => cart.add(product)}>
-            <ShoppingCart className="h-5 w-5" /> Add to Cart
-          </button>
-          <div className="mt-10 grid gap-4 md:grid-cols-2">
-            <InfoList title="Features" items={product.features} />
-            <InfoList title="Requirements" items={product.requirements} />
+          <h1 className="mt-3 text-3xl font-black text-white sm:text-4xl">{product.name}</h1>
+          {specs.length > 0 && (
+            <div className="specs-grid mt-5">
+              {specs.map(([label, value]) => (
+                <div className="spec-cell" key={label}>
+                  <span className="spec-label">{label}</span>
+                  <span className="spec-value">{value}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="purchase-box mt-6">
+            <h3 className="text-lg font-bold text-white">Purchase</h3>
+            <div className="purchase-product-row mt-3">
+              <div>
+                <strong className="text-white">{product.name}</strong>
+                <span className="text-2xl font-black text-cyan-200">{money(product.price)}</span>
+              </div>
+              <span className={`stock-badge ${inStock ? "in" : "out"}`}>{inStock ? `${product.stockCount} In Stock` : "Out of Stock"}</span>
+            </div>
+            <div className="qty-section mt-5">
+              <span className="text-sm text-slate-400">Select Quantity</span>
+              <div className="qty-control mt-1">
+                <button onClick={() => setQty(Math.max(1, qty - 1))}><Minus className="h-4 w-4" /></button>
+                <input type="number" min="1" max={product.stockCount || 1} value={qty} onChange={(e) => setQty(Math.max(1, Number(e.target.value)))} />
+                <button onClick={() => setQty(qty + 1)}><Plus className="h-4 w-4" /></button>
+              </div>
+            </div>
+            <div className="mt-4">
+              <span className="text-sm text-slate-400">Total</span>
+              <p className="text-3xl font-black text-white">{money(total)}</p>
+            </div>
+            <div className="purchase-actions mt-5">
+              <button className="secondary-btn flex-1" onClick={() => { for (let i = 0; i < qty; i++) cart.add(product); }} disabled={!inStock}>
+                <ShoppingCart className="h-5 w-5" /> Add to Cart
+              </button>
+              <button className="primary-btn flex-1" onClick={() => { for (let i = 0; i < qty; i++) cart.add(product); navigate("/cart"); }} disabled={!inStock}>
+                Purchase
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1587,7 +1616,7 @@ function Footer() {
         <div>
           <Link href="/" className="brand-lockup">
             <span className="brand-mark">
-              <Zap className="h-5 w-5 text-cyan-200" />
+              <img src="/images/zyvola-logo.png" alt="ZYVORA logo" />
             </span>
             <span>
               <span className="brand-name">ZYVORA</span>
