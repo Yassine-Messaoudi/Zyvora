@@ -991,7 +991,7 @@ function OrderCard({ order }) {
 
 function AdminPage({ section }) {
   const [token, setToken] = useState(localStorage.getItem(ADMIN_TOKEN_KEY) || "");
-  const [login, setLogin] = useState({ email: "admin@zyvora.local", password: "change-this-password" });
+  const [login, setLogin] = useState({ email: "crownshoptn@gmail.com", password: "" });
   const [error, setError] = useState("");
   const [data, setData] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);

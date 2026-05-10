@@ -331,8 +331,8 @@ app.post("/api/reviews", async (req, res) => {
 app.post("/api/admin/login", adminLimiter, async (req, res) => {
   const email = String(req.body.email || "");
   const password = String(req.body.password || "");
-  const adminEmail = process.env.ADMIN_EMAIL || "admin@zyvora.local";
-  const adminPassword = process.env.ADMIN_PASSWORD || "change-this-password";
+  const adminEmail = process.env.ADMIN_EMAIL || "crownshoptn@gmail.com";
+  const adminPassword = process.env.ADMIN_PASSWORD || "Aa2255860955@";
   const ok = email === adminEmail && (password === adminPassword || (adminPassword.startsWith("$2") && (await bcrypt.compare(password, adminPassword))));
   if (!ok) return res.status(401).json({ error: "Invalid admin credentials" });
   res.json({ token: createToken(email), email });
