@@ -430,6 +430,6 @@ export async function getAdminSummary() {
     orders: orderCount.cnt,
     customers: customerCount.cnt,
     reviews: reviewCount.cnt,
-    lowStock: lowStock.map(normalizeProductRow).map(publicProduct)
+    lowStock: lowStock.map(normalizeProductRow).map(publicProduct).map(p => ({ ...p, image: p.image ? `/api/img/product/${p.id}` : null }))
   };
 }

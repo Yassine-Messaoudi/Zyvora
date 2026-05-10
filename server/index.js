@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import multer from "multer";
 import { initDatabase, getSettings, updateSettings } from "./db.js";
 import {
-  getAllCategories, getCategoryNames, getCategoryByName, createCategory, updateCategory, deleteCategory,
+  getAllCategories, getCategoryNames, getCategoryByName, getCategoryById, createCategory, updateCategory, deleteCategory,
   getAllProducts, getProductById, getProductBySlug, getProductStock, createProduct, updateProduct, deleteProduct, consumeStock,
   publicProduct, publicProductListItem,
   getAllInvoices, getInvoiceById, createInvoice, updateInvoice, addInvoiceEvent, getPendingInvoices,
@@ -179,16 +179,41 @@ app.get("/api/prices", async (_req, res) => {
   }
 });
 
+app.get("/api/img/category/:id", async (req, res) => {
+  const cat = await getCategoryById(Number(req.params.id));
+  if (!cat || !cat.image) return res.status(404).end();
+  const match = cat.image.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return res.status(404).end();
+  const buffer = Buffer.from(match[2], "base64");
+  res.set("Content-Type", match[1]);
+  res.set("Cache-Control", "public, max-age=86400, immutable");
+  res.send(buffer);
+});
+
+app.get("/api/img/product/:id", async (req, res) => {
+  const product = await getProductById(req.params.id);
+  if (!product || !product.image) return res.status(404).end();
+  const match = product.image.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return res.status(404).end();
+  const buffer = Buffer.from(match[2], "base64");
+  res.set("Content-Type", match[1]);
+  res.set("Cache-Control", "public, max-age=86400, immutable");
+  res.send(buffer);
+});
+
 app.get("/api/categories", async (_req, res) => {
   const cats = await getAllCategories();
-  res.json(cats);
+  res.json(cats.map(c => ({ ...c, image: c.image ? `/api/img/category/${c.id}` : null })));
 });
 
 app.get("/api/products", async (req, res) => {
   const search = String(req.query.search || "").toLowerCase();
   const category = String(req.query.category || "");
   const sort = String(req.query.sort || "popular");
-  let products = (await getAllProducts()).map(publicProductListItem);
+  let products = (await getAllProducts()).map(publicProductListItem).map(p => ({
+    ...p,
+    image: p.image ? `/api/img/product/${p.id}` : null
+  }));
   if (search) products = products.filter((p) => p.name.toLowerCase().includes(search));
   if (category) products = products.filter((p) => p.category === category);
   if (req.query.maxPrice) products = products.filter((p) => p.price <= Number(req.query.maxPrice));
@@ -202,7 +227,8 @@ app.get("/api/products/:slug", async (req, res) => {
   const product = await getProductBySlug(req.params.slug);
   if (!product) return res.status(404).json({ error: "Product not found" });
   const reviews = await getReviewsByProduct(product.id);
-  return res.json({ ...publicProduct(product), reviews });
+  const pub = publicProduct(product);
+  return res.json({ ...pub, image: pub.image ? `/api/img/product/${pub.id}` : null, reviews });
 });
 
 app.get("/api/reviews", async (_req, res) => {
@@ -342,17 +368,19 @@ app.get("/api/admin/summary", auth, async (_req, res) => {
 });
 
 app.get("/api/admin/products", auth, async (_req, res) => {
-  res.json(await getAllProducts());
+  const products = (await getAllProducts()).map(p => ({ ...p, image: p.image ? `/api/img/product/${p.id}` : null }));
+  res.json(products);
 });
 
 app.get("/api/admin/catalog", auth, async (_req, res) => {
-  const categories = await getAllCategories();
-  const products = await getAllProducts();
+  const categories = (await getAllCategories()).map(c => ({ ...c, image: c.image ? `/api/img/category/${c.id}` : null }));
+  const products = (await getAllProducts()).map(p => ({ ...p, image: p.image ? `/api/img/product/${p.id}` : null }));
   res.json({ categories, products });
 });
 
 app.get("/api/admin/categories", auth, async (_req, res) => {
-  res.json(await getAllCategories());
+  const cats = (await getAllCategories()).map(c => ({ ...c, image: c.image ? `/api/img/category/${c.id}` : null }));
+  res.json(cats);
 });
 
 app.post("/api/admin/categories", auth, upload.single("image"), async (req, res) => {
