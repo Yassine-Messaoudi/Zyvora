@@ -472,52 +472,121 @@ function Stars({ rating, compact = false }) {
 }
 
 function ProductsPage() {
-  const route = useRouteContext();
-  const query = new URLSearchParams(route.search);
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [search, setSearch] = useState(query.get("search") || "");
-  const [activeCategory, setActiveCategory] = useState(query.get("category") || "");
+  const [search, setSearch] = useState("");
+  const [openCat, setOpenCat] = useState(null);
+  const [activePill, setActivePill] = useState("");
   const cart = useCart();
+
   useEffect(() => {
     api("/categories").then(setCategories);
+    api("/products").then(setProducts);
   }, []);
-  useEffect(() => {
-    const params = new URLSearchParams();
-    if (search) params.set("search", search);
-    if (activeCategory) params.set("category", activeCategory);
-    api(`/products?${params}`).then(setProducts);
-  }, [search, activeCategory]);
-  const catNames = categories.map((c) => c.name || c);
+
+  const grouped = {};
+  products.forEach((p) => {
+    const cat = p.category || "Uncategorized";
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(p);
+  });
+
+  const catData = categories.map((c) => {
+    const name = c.name || c;
+    const items = grouped[name] || [];
+    const prices = items.map((p) => Number(p.price));
+    const totalStock = items.reduce((sum, p) => sum + (p.stockCount || 0), 0);
+    return {
+      ...c,
+      name,
+      image: c.image || null,
+      items,
+      minPrice: prices.length ? Math.min(...prices) : 0,
+      maxPrice: prices.length ? Math.max(...prices) : 0,
+      totalStock,
+    };
+  });
+
+  const filteredCats = activePill
+    ? catData.filter((c) => c.name === activePill)
+    : search
+      ? catData.filter((c) => c.name.toLowerCase().includes(search.toLowerCase()) || c.items.some((p) => p.name.toLowerCase().includes(search.toLowerCase())))
+      : catData;
+
+  const modalProducts = openCat ? (grouped[openCat] || []) : [];
+
   return (
     <section className="mx-auto max-w-7xl px-4 py-12">
       <div className="products-search-bar">
         <span className="text-xs font-bold uppercase tracking-widest text-cyan-200">Keyword</span>
         <div className="search-input-wrap">
           <Search className="h-4 w-4 text-slate-400" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search products..." />
+          <input value={search} onChange={(e) => { setSearch(e.target.value); setActivePill(""); }} placeholder="Search products..." />
         </div>
       </div>
       <div className="category-pills-section mt-6">
         <span className="text-xs font-bold uppercase tracking-widest text-cyan-200">Category</span>
         <div className="category-pills mt-2">
-          <button className={`cat-pill ${activeCategory === "" ? "active" : ""}`} onClick={() => setActiveCategory("")}>All</button>
-          {catNames.map((name) => (
-            <button key={name} className={`cat-pill ${activeCategory === name ? "active" : ""}`} onClick={() => setActiveCategory(name)}>{name}</button>
+          <button className={`cat-pill ${activePill === "" ? "active" : ""}`} onClick={() => { setActivePill(""); setSearch(""); }}>All</button>
+          {catData.map((c) => (
+            <button key={c.name} className={`cat-pill ${activePill === c.name ? "active" : ""}`} onClick={() => { setActivePill(c.name); setSearch(""); }}>{c.name}</button>
           ))}
         </div>
       </div>
       <div className="product-grid mt-8">
-        {products.map((product) => (
-          <ProductCard key={product.id} product={product} onAdd={() => cart.add(product)} />
+        {filteredCats.map((c) => (
+          <motion.article className="product-card premium-hover cursor-pointer" key={c.name} whileHover={{ y: -7 }} transition={{ duration: 0.18 }} onClick={() => setOpenCat(c.name)}>
+            <div className="product-image">
+              {c.image ? <img src={c.image} alt={c.name} /> : <div className="product-image-placeholder"><Package className="h-10 w-10 text-slate-600" /></div>}
+            </div>
+            <div className="product-content">
+              <h3>{c.name}</h3>
+              <div className="product-buy-row">
+                <strong className="text-cyan-200">
+                  {c.minPrice === c.maxPrice ? money(c.minPrice) : `${money(c.minPrice)} - ${money(c.maxPrice)}`}
+                </strong>
+                <span className={`stock-badge ${c.totalStock > 0 ? "in" : "out"}`}>
+                  {c.totalStock > 0 ? `${c.totalStock} in stock` : "Out of stock"}
+                </span>
+              </div>
+            </div>
+          </motion.article>
         ))}
-        {products.length === 0 && (
+        {filteredCats.length === 0 && (
           <div className="empty-state col-span-full">
             <Package className="h-8 w-8 text-cyan-200" />
-            <p>No products found{activeCategory ? ` in "${activeCategory}"` : ""}.</p>
+            <p>No categories found.</p>
           </div>
         )}
       </div>
+
+      {openCat && (
+        <div className="modal-overlay" onClick={() => setOpenCat(null)}>
+          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>{openCat}</h2>
+              <button className="modal-close" onClick={() => setOpenCat(null)}><X className="h-5 w-5" /></button>
+            </div>
+            <div className="modal-products">
+              {modalProducts.length === 0 && <p className="text-slate-400 text-center py-8">No products in this category yet.</p>}
+              {modalProducts.map((product) => (
+                <Link href={`/products/${product.slug}`} key={product.id} className="modal-product-card" onClick={() => setOpenCat(null)}>
+                  <div className="modal-product-img">
+                    {product.image ? <img src={product.image} alt={product.name} /> : <div className="product-image-placeholder"><Package className="h-8 w-8 text-slate-600" /></div>}
+                  </div>
+                  <h4>{product.name}</h4>
+                  <div className="modal-product-meta">
+                    <span className="text-cyan-200 font-bold">{money(product.price)}</span>
+                    <span className={`stock-badge ${product.stockCount > 0 ? "in" : "out"}`}>
+                      {product.stockCount > 0 ? `${product.stockCount} in stock` : "Out of stock"}
+                    </span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
