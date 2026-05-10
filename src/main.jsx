@@ -53,6 +53,7 @@ import {
   siSupercell,
   siValorant
 } from "simple-icons";
+import { jsPDF } from "jspdf";
 import "./styles.css";
 
 const API = "/api";
@@ -60,9 +61,48 @@ const CART_KEY = "zyvora-cart";
 const ADMIN_TOKEN_KEY = "zyvora-admin-token";
 
 const CartContext = createContext(null);
+const CurrencyContext = createContext(null);
 
-function money(value) {
-  return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(value || 0);
+const CURRENCIES = [
+  { code: "EUR", symbol: "€", locale: "de-DE" },
+  { code: "USD", symbol: "$", locale: "en-US" },
+  { code: "GBP", symbol: "£", locale: "en-GB" },
+  { code: "TRY", symbol: "₺", locale: "tr-TR" },
+  { code: "TND", symbol: "د.ت", locale: "ar-TN" },
+  { code: "CNY", symbol: "¥", locale: "zh-CN" },
+];
+
+function CurrencyProvider({ children }) {
+  const [currency, setCurrency] = useState(() => localStorage.getItem("zyvora-currency") || "EUR");
+  const [rates, setRates] = useState({});
+  useEffect(() => {
+    api("/prices").then((data) => {
+      if (data && data.fiatRates) setRates(data.fiatRates);
+    }).catch(() => {});
+  }, []);
+  useEffect(() => localStorage.setItem("zyvora-currency", currency), [currency]);
+  const convert = (eurValue) => {
+    if (currency === "EUR") return eurValue || 0;
+    const key = `eurTo${currency.toLowerCase()}`;
+    const rate = rates[key];
+    return rate ? (eurValue || 0) * rate : eurValue || 0;
+  };
+  const value = useMemo(() => ({ currency, setCurrency, convert, rates }), [currency, rates]);
+  return <CurrencyContext.Provider value={value}>{children}</CurrencyContext.Provider>;
+}
+
+function useCurrency() { return useContext(CurrencyContext); }
+
+function money(value, curr) {
+  const code = curr || "EUR";
+  const info = CURRENCIES.find((c) => c.code === code) || CURRENCIES[0];
+  return new Intl.NumberFormat(info.locale, { style: "currency", currency: code }).format(value || 0);
+}
+
+function Money({ value }) {
+  const ctx = useCurrency();
+  if (!ctx) return money(value);
+  return money(ctx.convert(value), ctx.currency);
 }
 
 async function api(path, options = {}) {
@@ -184,12 +224,25 @@ function App() {
   const route = useRoute();
   return (
     <RouteContext.Provider value={route}>
-      <CartProvider>
-        <Shell>
-          <Router />
-        </Shell>
-      </CartProvider>
+      <CurrencyProvider>
+        <CartProvider>
+          <Shell>
+            <Router />
+          </Shell>
+        </CartProvider>
+      </CurrencyProvider>
     </RouteContext.Provider>
+  );
+}
+
+function CurrencySelector() {
+  const { currency, setCurrency } = useCurrency();
+  return (
+    <select className="currency-select" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+      {CURRENCIES.map((c) => (
+        <option key={c.code} value={c.code}>{c.symbol} {c.code}</option>
+      ))}
+    </select>
   );
 }
 
@@ -234,10 +287,14 @@ function Shell({ children }) {
                 </Link>
               )
             )}
+            <CurrencySelector />
           </nav>
-          <button className="icon-btn lg:hidden" onClick={() => setOpen(true)} aria-label="Open menu">
-            <Menu className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-2 lg:hidden">
+            <CurrencySelector />
+            <button className="icon-btn" onClick={() => setOpen(true)} aria-label="Open menu">
+              <Menu className="h-5 w-5" />
+            </button>
+          </div>
         </div>
       </header>
       {open && (
@@ -454,7 +511,7 @@ function ProductCard({ product, onAdd }) {
       <div className="product-content">
         <h3>{product.name}</h3>
         <div className="product-buy-row">
-          <strong className="text-cyan-200">{money(product.price)}</strong>
+          <strong className="text-cyan-200"><Money value={product.price} /></strong>
           <span className={`stock-badge ${inStock ? "in" : "out"}`}>{inStock ? `${product.stockCount} in stock` : "Out of stock"}</span>
         </div>
       </div>
@@ -543,7 +600,7 @@ function ProductsPage() {
               <h3>{c.name}</h3>
               <div className="product-buy-row">
                 <strong className="text-cyan-200">
-                  {c.minPrice === c.maxPrice ? money(c.minPrice) : `${money(c.minPrice)} - ${money(c.maxPrice)}`}
+                  {c.minPrice === c.maxPrice ? <Money value={c.minPrice} /> : <><Money value={c.minPrice} /> – <Money value={c.maxPrice} /></>}
                 </strong>
                 <span className="stock-badge in">
                   {c.items.length} {c.items.length === 1 ? "product" : "products"}
@@ -576,7 +633,7 @@ function ProductsPage() {
                   </div>
                   <h4>{product.name}</h4>
                   <div className="modal-product-meta">
-                    <span className="text-cyan-200 font-bold">{money(product.price)}</span>
+                    <span className="text-cyan-200 font-bold"><Money value={product.price} /></span>
                     <span className={`stock-badge ${product.stockCount > 0 ? "in" : "out"}`}>
                       {product.stockCount > 0 ? `${product.stockCount} in stock` : "Out of stock"}
                     </span>
@@ -659,7 +716,7 @@ function ProductDetail({ slug }) {
             <div className="purchase-product-row mt-3">
               <div>
                 <strong className="text-white">{product.name}</strong>
-                <span className="text-2xl font-black text-cyan-200">{money(product.price)}</span>
+                <span className="text-2xl font-black text-cyan-200"><Money value={product.price} /></span>
               </div>
               <span className={`stock-badge ${inStock ? "in" : "out"}`}>{inStock ? `${product.stockCount} In Stock` : "Out of Stock"}</span>
             </div>
@@ -673,7 +730,7 @@ function ProductDetail({ slug }) {
             </div>
             <div className="mt-4">
               <span className="text-sm text-slate-400">Total</span>
-              <p className="text-3xl font-black text-white">{money(total)}</p>
+              <p className="text-3xl font-black text-white"><Money value={total} /></p>
             </div>
             <div className="purchase-actions mt-5">
               <button className="secondary-btn flex-1" onClick={() => { for (let i = 0; i < qty; i++) cart.add(product); }} disabled={!inStock}>
@@ -738,7 +795,7 @@ function CartPage() {
                 <div className="min-w-0 flex-1">
                   <p className="font-bold text-white">{item.name}</p>
                   <p className="text-sm text-cyan-200">{item.category}</p>
-                  <p className="mt-1 text-slate-300">{money(item.price)}</p>
+                  <p className="mt-1 text-slate-300"><Money value={item.price} /></p>
                 </div>
                 <div className="quantity">
                   <button onClick={() => cart.update(item.productId, item.quantity - 1)} aria-label="Decrease quantity">
@@ -757,7 +814,7 @@ function CartPage() {
           </div>
           <aside className="summary-panel">
             <p className="text-sm text-slate-400">Total</p>
-            <p className="mt-2 text-4xl font-black text-white">{money(cart.total)}</p>
+            <p className="mt-2 text-4xl font-black text-white"><Money value={cart.total} /></p>
             <Link href="/checkout" className="primary-btn mt-6 w-full justify-center">
               Checkout
             </Link>
@@ -842,7 +899,7 @@ function CheckoutPage() {
             <div className="co-logo-row"><Zap className="h-5 w-5 text-cyan-300" /><span className="font-bold text-white">ZYVORA</span></div>
           </div>
           <p className="co-pay-label">PAY ZYVORA</p>
-          <p className="co-total">{money(cart.total)}</p>
+          <p className="co-total"><Money value={cart.total} /></p>
           <div className="co-items">
             {cart.items.map((item) => (
               <div className="co-item" key={item.productId}>
@@ -850,13 +907,13 @@ function CheckoutPage() {
                 <div className="co-item-info">
                   <p className="co-item-name">{item.name} <span className="co-item-qty">x{item.quantity}</span></p>
                 </div>
-                <span className="co-item-price">{money(item.price * item.quantity)}</span>
+                <span className="co-item-price"><Money value={item.price * item.quantity} /></span>
               </div>
             ))}
           </div>
           <div className="co-subtotals">
-            <div className="co-row"><span>Subtotal</span><span>{money(cart.total)}</span></div>
-            <div className="co-row co-row-total"><span>Total</span><span>{money(cart.total)}</span></div>
+            <div className="co-row"><span>Subtotal</span><span><Money value={cart.total} /></span></div>
+            <div className="co-row co-row-total"><span>Total</span><span><Money value={cart.total} /></span></div>
           </div>
           <div className="co-support">
             <p className="co-support-title">Having issues with your order?</p>
@@ -921,6 +978,69 @@ function CheckoutPage() {
       </form>
     </section>
   );
+}
+
+function downloadInvoicePdf(invoice) {
+  const doc = new jsPDF();
+  const w = doc.internal.pageSize.getWidth();
+  let y = 20;
+  doc.setFontSize(22);
+  doc.setFont("helvetica", "bold");
+  doc.text("ZYVORA", 14, y);
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "normal");
+  doc.text("Digital Market", 14, y + 6);
+  doc.setFontSize(12);
+  doc.setFont("helvetica", "bold");
+  doc.text("INVOICE", w - 14, y, { align: "right" });
+  y += 20;
+  doc.setDrawColor(200);
+  doc.line(14, y, w - 14, y);
+  y += 10;
+  const rows = [
+    ["Invoice ID", invoice.id],
+    ["Status", invoice.status.toUpperCase()],
+    ["E-mail", invoice.customerEmail],
+    ["Payment Method", invoice.selectedCoin || "N/A"],
+    ["Total (EUR)", `€${Number(invoice.totalUsd).toFixed(2)}`],
+  ];
+  if (invoice.expectedCryptoAmount) rows.push(["Crypto Amount", `${invoice.expectedCryptoAmount} ${invoice.selectedCoin}`]);
+  if (invoice.depositAddress) rows.push(["Deposit Address", invoice.depositAddress]);
+  if (invoice.discord) rows.push(["Discord", invoice.discord]);
+  rows.push(["Created", new Date(invoice.createdAt).toLocaleString()]);
+  doc.setFontSize(10);
+  for (const [label, val] of rows) {
+    doc.setFont("helvetica", "bold");
+    doc.text(label + ":", 14, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(String(val), 60, y);
+    y += 7;
+  }
+  y += 5;
+  doc.line(14, y, w - 14, y);
+  y += 10;
+  doc.setFont("helvetica", "bold");
+  doc.text("ITEMS", 14, y);
+  y += 7;
+  doc.setFont("helvetica", "normal");
+  const items = typeof invoice.items === "string" ? JSON.parse(invoice.items) : invoice.items;
+  for (const item of items) {
+    doc.text(`${item.name}  x${item.quantity}`, 14, y);
+    doc.text(`€${Number(item.lineTotal || item.price * item.quantity).toFixed(2)}`, w - 14, y, { align: "right" });
+    y += 6;
+  }
+  y += 5;
+  doc.line(14, y, w - 14, y);
+  y += 8;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.text(`TOTAL: €${Number(invoice.totalUsd).toFixed(2)}`, w - 14, y, { align: "right" });
+  y += 15;
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(120);
+  doc.text("Thank you for your purchase. For support, open a ticket on our Discord server.", 14, y);
+  doc.save(`ZYVORA-Invoice-${invoice.id}.pdf`);
 }
 
 function InvoicePage({ invoiceId }) {
@@ -1028,33 +1148,39 @@ function InvoicePage({ invoiceId }) {
           )}
         </div>
       )}
-      <div className="inv-info-table">
-        <p className="inv-info-title">ORDER INFORMATION</p>
-        <div className="inv-info-row"><span>Invoice ID</span><span className="inv-info-val">{invoice.id} <button className="inv-copy-btn" onClick={() => copyText(invoice.id, "id")}>{copied === "id" ? <CheckCircle2 className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}</button></span></div>
-        <div className="inv-info-row"><span>Payment Method</span><span className="inv-info-val">{coinLabel} <span className="co-pay-icon" style={{ background: coinColor, width: "22px", height: "22px", fontSize: "11px" }}>{coinIcon}</span></span></div>
-        <div className="inv-info-row"><span>E-mail Address</span><span className="inv-info-val">{invoice.customerEmail}</span></div>
-        {invoice.discord && <div className="inv-info-row"><span>Discord</span><span className="inv-info-val">{invoice.discord}</span></div>}
-        <div className="inv-info-row"><span>Total Price</span><span className="inv-info-val">{money(invoice.totalUsd)}</span></div>
-        {invoice.expectedCryptoAmount && <div className="inv-info-row"><span>Total Amount ({invoice.selectedCoin})</span><span className="inv-info-val">{invoice.expectedCryptoAmount} {invoice.selectedCoin}</span></div>}
-        <div className="inv-info-row"><span>Created</span><span className="inv-info-val">{createdAgo()}</span></div>
-        <div className="inv-info-row"><span>Expires</span><span className="inv-info-val">{expiresIn()}</span></div>
-      </div>
-      {prices && prices.fiatRates && (
-        <div className="inv-info-table" style={{marginTop:"1rem"}}>
-          <p className="inv-info-title">PRICE IN OTHER CURRENCIES</p>
-          {Object.entries({
-            USD: prices.fiatRates.eurTousd,
-            USDT: prices.fiatRates.eurTousdt,
-            GBP: prices.fiatRates.eurTogbp,
-            TRY: prices.fiatRates.eurTotry,
-            CNY: prices.fiatRates.eurTocny
-          }).filter(([,r]) => r).map(([fiat, rate]) => (
-            <div className="inv-info-row" key={fiat}>
-              <span>{fiat}</span>
-              <span className="inv-info-val">{(invoice.totalUsd * rate).toFixed(2)} {fiat}</span>
+      {paid && (
+        <>
+          <div className="inv-info-table">
+            <p className="inv-info-title">ORDER INFORMATION</p>
+            <div className="inv-info-row"><span>Invoice ID</span><span className="inv-info-val">{invoice.id} <button className="inv-copy-btn" onClick={() => copyText(invoice.id, "id")}>{copied === "id" ? <CheckCircle2 className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}</button></span></div>
+            <div className="inv-info-row"><span>Payment Method</span><span className="inv-info-val">{coinLabel} <span className="co-pay-icon" style={{ background: coinColor, width: "22px", height: "22px", fontSize: "11px" }}>{coinIcon}</span></span></div>
+            <div className="inv-info-row"><span>E-mail Address</span><span className="inv-info-val">{invoice.customerEmail}</span></div>
+            {invoice.discord && <div className="inv-info-row"><span>Discord</span><span className="inv-info-val">{invoice.discord}</span></div>}
+            <div className="inv-info-row"><span>Total Price</span><span className="inv-info-val">{money(invoice.totalUsd)}</span></div>
+            {invoice.expectedCryptoAmount && <div className="inv-info-row"><span>Total Amount ({invoice.selectedCoin})</span><span className="inv-info-val">{invoice.expectedCryptoAmount} {invoice.selectedCoin}</span></div>}
+            <div className="inv-info-row"><span>Created</span><span className="inv-info-val">{createdAgo()}</span></div>
+          </div>
+          {prices && prices.fiatRates && (
+            <div className="inv-info-table" style={{marginTop:"1rem"}}>
+              <p className="inv-info-title">PRICE IN OTHER CURRENCIES</p>
+              {Object.entries({
+                USD: prices.fiatRates.eurTousd,
+                USDT: prices.fiatRates.eurTousdt,
+                GBP: prices.fiatRates.eurTogbp,
+                TRY: prices.fiatRates.eurTotry,
+                CNY: prices.fiatRates.eurTocny
+              }).filter(([,r]) => r).map(([fiat, rate]) => (
+                <div className="inv-info-row" key={fiat}>
+                  <span>{fiat}</span>
+                  <span className="inv-info-val">{(invoice.totalUsd * rate).toFixed(2)} {fiat}</span>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+          <button className="inv-discord-btn" style={{marginTop:"1rem", borderColor:"rgba(125,249,255,0.3)", background:"rgba(125,249,255,0.08)", color:"var(--cyan)"}} onClick={() => downloadInvoicePdf(invoice)}>
+            <Download className="h-5 w-5" /> Download PDF Invoice
+          </button>
+        </>
       )}
     </section>
   );

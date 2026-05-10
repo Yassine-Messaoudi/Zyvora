@@ -58,7 +58,9 @@ const checkoutLimiter = rateLimit({ windowMs: 60_000, limit: 12 });
 const adminLimiter = rateLimit({ windowMs: 60_000, limit: 20 });
 
 function makeInvoiceId() {
-  return `INV-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 6).toUpperCase()}`;
+  const ts = Date.now().toString(36).toUpperCase();
+  const rand = randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase();
+  return `INV-${ts}-${rand}`;
 }
 
 function auth(req, res, next) {
