@@ -1,0 +1,9 @@
+node_modules
+dist
+.env
+server/data/db.json
+server/storage/*
+!server/storage/.gitkeep
+public/uploads/*
+!public/uploads/.gitkeep
+npm-debug.log*

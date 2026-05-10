@@ -1,0 +1,1642 @@
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createRoot } from "react-dom/client";
+import { motion } from "framer-motion";
+import {
+  AlertTriangle,
+  BadgeDollarSign,
+  BarChart3,
+  Boxes,
+  Car,
+  CheckCircle2,
+  Code2,
+  Copy,
+  Download,
+  ExternalLink,
+  Filter,
+  Gamepad2,
+  Headphones,
+  KeyRound,
+  LayoutDashboard,
+  Lock,
+  Mail,
+  Map,
+  Menu,
+  MessageCircle,
+  Minus,
+  Monitor,
+  Package,
+  Plus,
+  Rocket,
+  Search,
+  Settings,
+  Shield,
+  ShieldCheck,
+  Shirt,
+  ShoppingCart,
+  Star,
+  Timer,
+  Trash2,
+  Upload,
+  UserCircle,
+  Wallet,
+  Wrench,
+  X,
+  Zap,
+  Image
+} from "lucide-react";
+import {
+  siCounterstrike,
+  siFivem,
+  siFortnite,
+  siRoblox,
+  siRust,
+  siSupercell,
+  siValorant
+} from "simple-icons";
+import "./styles.css";
+
+const API = "/api";
+const CART_KEY = "zyvora-cart";
+const ADMIN_TOKEN_KEY = "zyvora-admin-token";
+
+const CartContext = createContext(null);
+
+function money(value) {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value || 0);
+}
+
+async function api(path, options = {}) {
+  const isFormData = options.body instanceof FormData;
+  const headers = isFormData
+    ? { ...(options.headers || {}) }
+    : { "Content-Type": "application/json", ...(options.headers || {}) };
+  const response = await fetch(`${API}${path}`, { ...options, headers });
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!response.ok) throw new Error(data?.error || "Request failed");
+  return data;
+}
+
+function useRoute() {
+  const [path, setPath] = useState(window.location.pathname + window.location.search);
+  useEffect(() => {
+    const sync = () => setPath(window.location.pathname + window.location.search);
+    window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, []);
+  const navigate = (href) => {
+    window.history.pushState({}, "", href);
+    setPath(window.location.pathname + window.location.search);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  return { path, pathname: window.location.pathname, search: window.location.search, navigate };
+}
+
+function CartProvider({ children }) {
+  const [items, setItems] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(CART_KEY) || "[]");
+    } catch {
+      return [];
+    }
+  });
+  useEffect(() => localStorage.setItem(CART_KEY, JSON.stringify(items)), [items]);
+  const value = useMemo(() => {
+    const add = (product) => {
+      setItems((current) => {
+        const existing = current.find((item) => item.productId === product.id);
+        if (existing) return current.map((item) => (item.productId === product.id ? { ...item, quantity: item.quantity + 1 } : item));
+        return [...current, { productId: product.id, slug: product.slug, name: product.name, image: product.image, price: product.price, category: product.category, quantity: 1 }];
+      });
+    };
+    const update = (productId, quantity) => setItems((current) => current.map((item) => (item.productId === productId ? { ...item, quantity: Math.max(1, quantity) } : item)));
+    const remove = (productId) => setItems((current) => current.filter((item) => item.productId !== productId));
+    const clear = () => setItems([]);
+    const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    return { items, add, update, remove, clear, total, count: items.reduce((sum, item) => sum + item.quantity, 0) };
+  }, [items]);
+  return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
+}
+
+function useCart() {
+  return useContext(CartContext);
+}
+
+function Link({ href, children, className = "", onClick }) {
+  const route = useRouteContext();
+  return (
+    <a
+      href={href}
+      className={className}
+      onClick={(event) => {
+        event.preventDefault();
+        onClick?.();
+        route.navigate(href);
+      }}
+    >
+      {children}
+    </a>
+  );
+}
+
+const RouteContext = createContext(null);
+function useRouteContext() {
+  return useContext(RouteContext);
+}
+
+const categoryIcons = {
+  FiveM: Gamepad2,
+  Scripts: Code2,
+  Maps: Map,
+  Vehicles: Car,
+  EUP: Shirt,
+  Tools: Wrench,
+  Accounts: UserCircle,
+  Games: Monitor,
+  Methods: KeyRound,
+  Boosting: Rocket,
+  VPN: Shield,
+  Other: Boxes
+};
+
+const browseCategories = [
+  { name: "Accounts", category: "Accounts", icon: UserCircle },
+  { name: "Scripts", category: "Scripts", icon: Code2 },
+  { name: "Games", category: "Games", icon: Gamepad2 },
+  { name: "Tools", category: "Tools", icon: Wrench },
+  { name: "Methods", category: "Methods", icon: KeyRound },
+  { name: "Boosting", category: "Boosting", icon: Rocket },
+  { name: "VPN", category: "VPN", icon: Shield },
+  { name: "FiveM", category: "FiveM", brand: siFivem },
+  { name: "Counter-Strike 2", category: "Games", brand: siCounterstrike },
+  { name: "Valorant", category: "Games", brand: siValorant },
+  { name: "Fortnite", category: "Games", brand: siFortnite },
+  { name: "Roblox", category: "Games", brand: siRoblox },
+  { name: "Rust", category: "Games", brand: siRust },
+  { name: "Supercell", category: "Games", brand: siSupercell },
+  { name: "Maps", category: "Maps", icon: Map },
+  { name: "Vehicles", category: "Vehicles", icon: Car },
+  { name: "EUP", category: "EUP", icon: Shirt },
+  { name: "Other", category: "Other", icon: Boxes }
+];
+
+function App() {
+  const route = useRoute();
+  return (
+    <RouteContext.Provider value={route}>
+      <CartProvider>
+        <Shell>
+          <Router />
+        </Shell>
+      </CartProvider>
+    </RouteContext.Provider>
+  );
+}
+
+function Shell({ children }) {
+  const [open, setOpen] = useState(false);
+  const cart = useCart();
+  const nav = [
+    ["/", "Home"],
+    ["/products", "Products"],
+    ["/#reviews", "Reviews"],
+    ["https://discord.gg/your-server", "Discord"],
+    ["/cart", "Cart"],
+    ["/dashboard", "Dashboard"]
+  ];
+  return (
+    <div className="min-h-screen bg-[#02070D] text-[#F5FAFF]">
+      <div className="announcement">
+        <span>Discord restock alerts live now</span>
+        <span className="announcement-dot" />
+        <span>New crypto checkout invoices expire in 15 minutes</span>
+      </div>
+      <header className="site-header">
+        <div className="site-nav">
+          <Link href="/" className="brand-lockup">
+            <span className="brand-mark">
+              <Zap className="h-5 w-5 text-cyan-200" />
+            </span>
+            <span>
+              <span className="brand-name">ZYVORA</span>
+              <span className="brand-subtitle">Digital Market</span>
+            </span>
+          </Link>
+          <nav className="hidden items-center gap-2 lg:flex">
+            {nav.map(([href, label]) =>
+              href.startsWith("http") ? (
+                <a key={href} href={href} className="nav-link">
+                  {label}
+                </a>
+              ) : (
+                <Link key={href} href={href} className={label === "Dashboard" ? "nav-link dashboard-link" : "nav-link"}>
+                  {label === "Cart" ? `Cart (${cart.count})` : label}
+                </Link>
+              )
+            )}
+          </nav>
+          <button className="icon-btn lg:hidden" onClick={() => setOpen(true)} aria-label="Open menu">
+            <Menu className="h-5 w-5" />
+          </button>
+        </div>
+      </header>
+      {open && (
+        <div className="fixed inset-0 z-50 bg-black/70 lg:hidden">
+          <div className="ml-auto h-full w-80 border-l border-cyan-400/15 bg-[#07111D] p-5 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <span className="font-bold">Menu</span>
+              <button className="icon-btn" onClick={() => setOpen(false)} aria-label="Close menu">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="mt-6 grid gap-2">
+              {nav.map(([href, label]) =>
+                href.startsWith("http") ? (
+                  <a key={href} href={href} className="mobile-link">
+                    {label}
+                  </a>
+                ) : (
+                  <Link key={href} href={href} className="mobile-link" onClick={() => setOpen(false)}>
+                    {label === "Cart" ? `Cart (${cart.count})` : label}
+                  </Link>
+                )
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      <main>{children}</main>
+      <Footer />
+    </div>
+  );
+}
+
+function Router() {
+  const { pathname } = useRouteContext();
+  if (pathname === "/") return <HomePage />;
+  if (pathname === "/products") return <ProductsPage />;
+  if (pathname.startsWith("/products/")) return <ProductDetail slug={pathname.split("/").pop()} />;
+  if (pathname === "/cart") return <CartPage />;
+  if (pathname === "/checkout") return <CheckoutPage />;
+  if (pathname.startsWith("/invoice/")) return <InvoicePage invoiceId={pathname.split("/").pop()} />;
+  if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) return <DashboardPage />;
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) return <AdminPage section={pathname.split("/")[2] || "overview"} />;
+  if (pathname === "/terms") return <PolicyPage type="terms" />;
+  if (pathname === "/privacy") return <PolicyPage type="privacy" />;
+  if (pathname === "/support") return <SupportPage />;
+  return <NotFound />;
+}
+
+function HomePage() {
+  const [products, setProducts] = useState([]);
+  const [reviews, setReviews] = useState([]);
+  const cart = useCart();
+  useEffect(() => {
+    Promise.all([api("/products?sort=popular"), api("/reviews")]).then(([prod, rev]) => {
+      setProducts(prod.slice(0, 4));
+      setReviews(rev);
+    });
+  }, []);
+  return (
+    <>
+      <section className="hero-section">
+        <img className="hero-bg-art" src="/images/hero-reference-bg.png" alt="" aria-hidden="true" />
+        <div className="hero-particles" />
+        <div className="hero-shell">
+          <motion.div className="hero-copy" initial={{ opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55 }}>
+            <div className="eyebrow-badge">
+              <ShieldCheck className="h-4 w-4" /> Verified digital products
+            </div>
+            <h1>
+              Looking for premium digital products?
+              <span> We have got you covered.</span>
+            </h1>
+            <p className="hero-lede">
+              Instant crypto invoices, protected delivery logs, verified stock, and a customer dashboard for every key, file, credential, and private link.
+            </p>
+            <div className="hero-actions">
+              <a href="https://discord.gg/your-server" className="primary-btn">
+                <MessageCircle className="h-5 w-5" /> Join Discord
+              </a>
+              <Link href="/products" className="secondary-btn">
+                <Package className="h-5 w-5" /> Check Products
+              </Link>
+            </div>
+            <div className="hero-metrics">
+              <Metric value="4" label="crypto rails" />
+              <Metric value="15m" label="invoice windows" />
+              <Metric value="24/7" label="delivery logs" />
+            </div>
+          </motion.div>
+          <motion.div className="hero-visual" initial={{ opacity: 0, scale: 0.96, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 0.7 }}>
+            <div className="hero-orbit" />
+            <img className="hero-characters" src="/images/hero-reference-characters.png" alt="Gaming character squad" />
+            <div className="floating-stat bottom-10 right-4">
+              <Timer className="h-5 w-5 text-cyan-200" /> 15 min invoices
+            </div>
+          </motion.div>
+          <div className="hero-features">
+            <FeatureCard icon={ShieldCheck} title="Guaranteed Quality" text="Curated inventory with admin approval." />
+            <FeatureCard icon={Zap} title="Instant Delivery" text="Keys and files unlock after payment." />
+            <FeatureCard icon={Headphones} title="Live Support" text="Discord alerts and support routing." />
+          </div>
+        </div>
+      </section>
+
+      <section className="section-band section-space">
+        <div className="container-shell">
+          <SectionHeading eyebrow="Browse" title="Product Categories" text="Filter into the exact digital stock your server, account, or game workflow needs." />
+          <div className="category-grid mt-8">
+            {browseCategories.map((item) => {
+              const Icon = item.icon || categoryIcons[item.category] || Boxes;
+              return (
+                <Link href={`/products?category=${encodeURIComponent(item.category)}`} key={item.name} className="category-card premium-hover">
+                  <span className={item.brand ? "category-logo brand-logo" : "category-logo"}>
+                    {item.brand ? <BrandIcon icon={item.brand} /> : <Icon className="h-11 w-11" strokeWidth={2.15} />}
+                  </span>
+                  <span>{item.name}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      <section className="container-shell section-space">
+        <SectionHeading eyebrow="Featured" title="Popular Drops" text="Best-selling digital products with clean delivery paths and dashboard access." />
+        <div className="product-grid mt-8">
+          {products.map((product) => (
+            <ProductCard key={product.id} product={product} onAdd={() => cart.add(product)} />
+          ))}
+        </div>
+      </section>
+
+      <section id="reviews" className="section-band section-space">
+        <div className="container-shell">
+          <SectionHeading eyebrow="Trust" title="Purchase Reviews" text="Only approved purchase-based reviews appear here, keeping the store credible." />
+          {reviews.length ? (
+            <div className="mt-8 grid gap-5 md:grid-cols-3">
+              {reviews.slice(0, 3).map((review) => (
+                <div className="review-card premium-hover" key={review.id}>
+                  <Stars rating={review.rating} />
+                  <p className="mt-4 text-slate-200">{review.text}</p>
+                  <div className="mt-5 flex items-center justify-between gap-3">
+                    <p className="text-sm font-bold text-cyan-100">{review.name}</p>
+                    <span className="verified-pill">Verified purchase</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-state review-empty mt-8">
+              <div className="empty-icon"><Star className="h-7 w-7" /></div>
+              <h3>No public reviews yet</h3>
+              <p>Verified review cards appear here after approved customer purchases.</p>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <FaqSection />
+    </>
+  );
+}
+
+function FeatureCard({ icon: Icon, title, text }) {
+  return (
+    <motion.div className="feature-card premium-hover" whileHover={{ y: -6 }} transition={{ duration: 0.18 }}>
+      <span className="feature-icon"><Icon className="h-5 w-5" /></span>
+      <h3>{title}</h3>
+      <p>{text}</p>
+    </motion.div>
+  );
+}
+
+function BrandIcon({ icon }) {
+  return (
+    <svg viewBox="0 0 24 24" role="img" aria-label={icon.title} className="h-14 w-14" fill="currentColor">
+      <path d={icon.path} />
+    </svg>
+  );
+}
+
+function Metric({ value, label }) {
+  return (
+    <div className="metric-card">
+      <strong>{value}</strong>
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function SectionHeading({ eyebrow, title, text }) {
+  return (
+    <div className="section-heading">
+      <p>{eyebrow}</p>
+      <div>
+        <h2>{title}</h2>
+        {text && <span>{text}</span>}
+      </div>
+    </div>
+  );
+}
+
+function ProductCard({ product, onAdd }) {
+  return (
+    <motion.article className="product-card premium-hover" whileHover={{ y: -7 }} transition={{ duration: 0.18 }}>
+      <Link href={`/products/${product.slug}`} className="block">
+        <div className="product-image">
+          <img src={product.image} alt={product.name} />
+          <span>{product.badge}</span>
+        </div>
+      </Link>
+      <div className="product-content">
+        <div className="flex items-center justify-between gap-3">
+          <p className="product-category">{product.category}</p>
+          <Stars rating={product.rating} compact />
+        </div>
+        <h3>{product.name}</h3>
+        <p>{product.shortDescription}</p>
+        <div className="product-buy-row">
+          <div>
+            <strong>{money(product.price)}</strong>
+            <span className={product.stockCount > 0 ? "stock in-stock" : "stock out-stock"}>{product.stockStatus}</span>
+          </div>
+          <button className="icon-btn" onClick={onAdd} aria-label={`Add ${product.name} to cart`}>
+            <ShoppingCart className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="product-actions">
+          <Link href={`/products/${product.slug}`} className="small-btn">
+            View Product
+          </Link>
+          <button className="small-btn accent" onClick={onAdd}>
+            Add to Cart
+          </button>
+        </div>
+      </div>
+    </motion.article>
+  );
+}
+
+function Stars({ rating, compact = false }) {
+  return (
+    <span className="flex items-center gap-1 text-cyan-200">
+      <Star className="h-4 w-4 fill-current" />
+      <span className={compact ? "text-xs" : "text-sm"}>{rating || "New"}</span>
+    </span>
+  );
+}
+
+function ProductsPage() {
+  const route = useRouteContext();
+  const query = new URLSearchParams(route.search);
+  const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [filters, setFilters] = useState({
+    search: query.get("search") || "",
+    category: query.get("category") || "",
+    maxPrice: query.get("maxPrice") || "",
+    sort: query.get("sort") || "popular"
+  });
+  const cart = useCart();
+  useEffect(() => {
+    api("/categories").then(setCategories);
+  }, []);
+  useEffect(() => {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => value && params.set(key, value));
+    api(`/products?${params}`).then(setProducts);
+  }, [filters]);
+  return (
+    <section className="mx-auto max-w-7xl px-4 py-12">
+      <SectionHeading eyebrow="Storefront" title="Products" />
+      <div className="filters mt-8">
+        <label>
+          <Search className="h-4 w-4" />
+          <input value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} placeholder="Search products" />
+        </label>
+        <label>
+          <Filter className="h-4 w-4" />
+          <select value={filters.category} onChange={(event) => setFilters({ ...filters, category: event.target.value })}>
+            <option value="">All categories</option>
+            {categories.map((cat) => (
+              <option key={cat.id || cat} value={cat.name || cat}>{cat.name || cat}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <BadgeDollarSign className="h-4 w-4" />
+          <input type="number" value={filters.maxPrice} onChange={(event) => setFilters({ ...filters, maxPrice: event.target.value })} placeholder="Max price" />
+        </label>
+        <label>
+          <BarChart3 className="h-4 w-4" />
+          <select value={filters.sort} onChange={(event) => setFilters({ ...filters, sort: event.target.value })}>
+            <option value="popular">Popular</option>
+            <option value="newest">Newest</option>
+            <option value="price-low">Price low</option>
+          </select>
+        </label>
+      </div>
+      <div className="product-grid mt-8">
+        {products.map((product) => (
+          <ProductCard key={product.id} product={product} onAdd={() => cart.add(product)} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ProductDetail({ slug }) {
+  const [product, setProduct] = useState(null);
+  const cart = useCart();
+  useEffect(() => {
+    api(`/products/${slug}`).then(setProduct).catch(() => setProduct(false));
+  }, [slug]);
+  if (product === false) return <NotFound />;
+  if (!product) return <Loading />;
+  return (
+    <section className="mx-auto max-w-7xl px-4 py-12">
+      <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr]">
+        <div>
+          <div className="detail-image">
+            <img src={product.image} alt={product.name} />
+          </div>
+          <div className="mt-4 grid grid-cols-3 gap-3">
+            {[product.image, product.image, product.image].map((image, index) => (
+              <img className="thumb" src={image} alt={`${product.name} gallery ${index + 1}`} key={index} />
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="text-cyan-200">{product.category}</p>
+          <h1 className="mt-2 text-4xl font-black text-white sm:text-5xl">{product.name}</h1>
+          <div className="mt-4 flex flex-wrap items-center gap-4">
+            <Stars rating={product.rating} />
+            <span className="pill">{product.stockStatus}</span>
+            <span className="pill">{product.deliveryType}</span>
+          </div>
+          <p className="mt-6 text-4xl font-black text-white">{money(product.price)}</p>
+          <p className="mt-5 text-lg leading-8 text-slate-300">{product.description}</p>
+          <button className="primary-btn mt-8" onClick={() => cart.add(product)}>
+            <ShoppingCart className="h-5 w-5" /> Add to Cart
+          </button>
+          <div className="mt-10 grid gap-4 md:grid-cols-2">
+            <InfoList title="Features" items={product.features} />
+            <InfoList title="Requirements" items={product.requirements} />
+          </div>
+        </div>
+      </div>
+      <section className="mt-16">
+        <SectionHeading eyebrow="Reviews" title="Verified Feedback" />
+        {product.reviews?.length ? (
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            {product.reviews.map((review) => (
+              <div className="review-card" key={review.id}>
+                <Stars rating={review.rating} />
+                <p className="mt-3 text-slate-200">{review.text}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state mt-6">
+            <Star className="h-8 w-8 text-cyan-200" />
+            <p>No approved purchase reviews yet.</p>
+          </div>
+        )}
+      </section>
+    </section>
+  );
+}
+
+function InfoList({ title, items }) {
+  return (
+    <div className="info-panel">
+      <h3>{title}</h3>
+      <ul>
+        {items?.map((item) => (
+          <li key={item}>
+            <CheckCircle2 className="h-4 w-4 text-cyan-200" />
+            {item}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function CartPage() {
+  const cart = useCart();
+  return (
+    <section className="mx-auto max-w-5xl px-4 py-12">
+      <SectionHeading eyebrow="Basket" title="Cart" />
+      {cart.items.length ? (
+        <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_360px]">
+          <div className="grid gap-4">
+            {cart.items.map((item) => (
+              <div className="cart-row" key={item.productId}>
+                <img src={item.image} alt={item.name} />
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold text-white">{item.name}</p>
+                  <p className="text-sm text-cyan-200">{item.category}</p>
+                  <p className="mt-1 text-slate-300">{money(item.price)}</p>
+                </div>
+                <div className="quantity">
+                  <button onClick={() => cart.update(item.productId, item.quantity - 1)} aria-label="Decrease quantity">
+                    <Minus className="h-4 w-4" />
+                  </button>
+                  <span>{item.quantity}</span>
+                  <button onClick={() => cart.update(item.productId, item.quantity + 1)} aria-label="Increase quantity">
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
+                <button className="icon-btn" onClick={() => cart.remove(item.productId)} aria-label={`Remove ${item.name}`}>
+                  <Trash2 className="h-5 w-5" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <aside className="summary-panel">
+            <p className="text-sm text-slate-400">Total</p>
+            <p className="mt-2 text-4xl font-black text-white">{money(cart.total)}</p>
+            <Link href="/checkout" className="primary-btn mt-6 w-full justify-center">
+              Checkout
+            </Link>
+            <button className="secondary-btn mt-3 w-full justify-center" onClick={cart.clear}>
+              Clear Cart
+            </button>
+          </aside>
+        </div>
+      ) : (
+        <div className="empty-state mt-8">
+          <ShoppingCart className="h-8 w-8 text-cyan-200" />
+          <p>Your cart is empty.</p>
+          <Link href="/products" className="primary-btn mt-4">
+            Browse Products
+          </Link>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function CheckoutPage() {
+  const cart = useCart();
+  const route = useRouteContext();
+  const [form, setForm] = useState({ email: "", discord: "", couponCode: "", paymentMethod: "LTC", agreedToTerms: false, newsletter: false });
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const submit = async (event) => {
+    event.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const invoice = await api("/invoices", {
+        method: "POST",
+        body: JSON.stringify({
+          ...form,
+          items: cart.items.map((item) => ({ productId: item.productId, quantity: item.quantity }))
+        })
+      });
+      cart.clear();
+      route.navigate(`/invoice/${invoice.id}`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  if (!cart.items.length) return <CartPage />;
+  return (
+    <section className="mx-auto max-w-6xl px-4 py-12">
+      <SectionHeading eyebrow="Secure" title="Checkout" />
+      <form className="mt-8 grid gap-6 lg:grid-cols-[1fr_380px]" onSubmit={submit}>
+        <div className="checkout-panel">
+          <label className="field">
+            <span>Email address</span>
+            <input required type="text" inputMode="email" autoComplete="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
+          </label>
+          <label className="field">
+            <span>Discord username or ID</span>
+            <input value={form.discord} onChange={(event) => setForm({ ...form, discord: event.target.value })} />
+          </label>
+          <label className="field">
+            <span>Coupon code</span>
+            <input value={form.couponCode} onChange={(event) => setForm({ ...form, couponCode: event.target.value })} placeholder="LAUNCH10" />
+          </label>
+          <div>
+            <p className="mb-3 text-sm font-bold text-white">Payment method</p>
+            <div className="payment-grid">
+              {[
+                ["LTC", "Litecoin"],
+                ["BTC", "Bitcoin"],
+                ["SOL", "Solana"],
+                ["ETH", "Ethereum"],
+                ["PAYPAL_FF", "PayPal F&F"],
+                ["BALANCE", "Customer balance"]
+              ].map(([value, label]) => (
+                <label className={form.paymentMethod === value ? "payment active" : "payment"} key={value}>
+                  <input type="radio" checked={form.paymentMethod === value} onChange={() => setForm({ ...form, paymentMethod: value })} />
+                  <Wallet className="h-5 w-5" />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <label className="check-row">
+            <input required type="checkbox" checked={form.agreedToTerms} onChange={(event) => setForm({ ...form, agreedToTerms: event.target.checked })} />
+            <span>I agree to the Terms of Service.</span>
+          </label>
+          <label className="check-row">
+            <input type="checkbox" checked={form.newsletter} onChange={(event) => setForm({ ...form, newsletter: event.target.checked })} />
+            <span>Send me restock and product alerts.</span>
+          </label>
+          {error && <div className="error-box">{error}</div>}
+        </div>
+        <aside className="summary-panel">
+          <p className="text-sm text-slate-400">Order total</p>
+          <p className="mt-2 text-4xl font-black text-white">{money(cart.total)}</p>
+          <div className="mt-6 grid gap-3">
+            {cart.items.map((item) => (
+              <div className="flex justify-between gap-3 text-sm" key={item.productId}>
+                <span className="text-slate-300">{item.name} x{item.quantity}</span>
+                <span className="text-white">{money(item.price * item.quantity)}</span>
+              </div>
+            ))}
+          </div>
+          <button className="primary-btn mt-6 w-full justify-center" disabled={loading}>
+            {loading ? "Creating invoice..." : "Create Invoice"}
+          </button>
+        </aside>
+      </form>
+    </section>
+  );
+}
+
+function InvoicePage({ invoiceId }) {
+  const [invoice, setInvoice] = useState(null);
+  const [error, setError] = useState("");
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const load = () => api(`/invoices/${invoiceId}`).then(setInvoice).catch((err) => setError(err.message));
+    load();
+    const poll = setInterval(load, 5000);
+    const tick = setInterval(() => setNow(Date.now()), 1000);
+    return () => {
+      clearInterval(poll);
+      clearInterval(tick);
+    };
+  }, [invoiceId]);
+  if (error) return <ErrorMessage message={error} />;
+  if (!invoice) return <Loading />;
+  const seconds = Math.max(0, Math.floor((new Date(invoice.expiresAt).getTime() - now) / 1000));
+  const simulate = () => api(`/invoices/${invoice.id}/simulate-payment`, { method: "POST", body: "{}" }).then(setInvoice);
+  return (
+    <section className="mx-auto max-w-6xl px-4 py-12">
+      <SectionHeading eyebrow="Invoice" title={invoice.id} />
+      <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_380px]">
+        <div className="invoice-panel">
+          <StatusRail status={invoice.status} />
+          <div className="mt-8 grid gap-4 md:grid-cols-2">
+            <DataTile label="Status" value={invoice.status} />
+            <DataTile label="Total USD" value={money(invoice.totalUsd)} />
+            <DataTile label="Selected coin" value={invoice.selectedCoin} />
+            <DataTile label="Confirmations" value={`${invoice.confirmationCount || 0}`} />
+          </div>
+          {invoice.qrCode && (
+            <div className="mt-8 grid gap-6 md:grid-cols-[280px_1fr]">
+              <img className="qr" src={invoice.qrCode} alt="Payment QR code" />
+              <div className="grid gap-4">
+                <CopyField label="Deposit address" value={invoice.depositAddress} />
+                <CopyField label="Exact amount" value={String(invoice.expectedCryptoAmount)} />
+                <CopyField label="QR data" value={invoice.qrCodeData} />
+              </div>
+            </div>
+          )}
+          <div className="mt-8 rounded-lg border border-cyan-300/15 bg-cyan-300/5 p-4 text-sm text-slate-300">
+            Blockchain payments are matched by deposit address. The invoice ID stays in this store database and is linked to the unique address assigned above.
+          </div>
+        </div>
+        <aside className="summary-panel">
+          <Timer className="h-8 w-8 text-cyan-200" />
+          <p className="mt-4 text-sm text-slate-400">Expires in</p>
+          <p className="mt-1 text-4xl font-black text-white">
+            {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}
+          </p>
+          <div className="mt-6 grid gap-3">
+            {invoice.items.map((item) => (
+              <div className="flex justify-between gap-3 text-sm" key={item.productId}>
+                <span className="text-slate-300">{item.name} x{item.quantity}</span>
+                <span className="text-white">{money(item.lineTotal)}</span>
+              </div>
+            ))}
+          </div>
+          {invoice.status !== "paid" && invoice.status !== "expired" && (
+            <button className="secondary-btn mt-6 w-full justify-center" onClick={simulate}>
+              Simulate Blockchain Payment
+            </button>
+          )}
+          {invoice.status === "paid" && (
+            <Link href={`/dashboard?invoiceId=${invoice.id}`} className="primary-btn mt-6 w-full justify-center">
+              Open Dashboard
+            </Link>
+          )}
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+function StatusRail({ status }) {
+  const steps = ["pending", "detected", "confirming", "paid"];
+  const index = steps.indexOf(status);
+  return (
+    <div className="status-rail">
+      {steps.map((step, position) => (
+        <div className={position <= index ? "status-step active" : "status-step"} key={step}>
+          <span>{position + 1}</span>
+          <p>{step}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DataTile({ label, value }) {
+  return (
+    <div className="data-tile">
+      <p>{label}</p>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function CopyField({ label, value }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="copy-field">
+      <span>{label}</span>
+      <div>
+        <code>{value}</code>
+        <button
+          type="button"
+          onClick={() => {
+            navigator.clipboard?.writeText(value);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1200);
+          }}
+          aria-label={`Copy ${label}`}
+        >
+          {copied ? <CheckCircle2 className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function DashboardPage() {
+  const route = useRouteContext();
+  const [lookup, setLookup] = useState({ email: new URLSearchParams(route.search).get("email") || "", invoiceId: new URLSearchParams(route.search).get("invoiceId") || "" });
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  const load = async (event) => {
+    event?.preventDefault();
+    setError("");
+    try {
+      const params = new URLSearchParams();
+      if (lookup.email) params.set("email", lookup.email);
+      if (lookup.invoiceId) params.set("invoiceId", lookup.invoiceId);
+      setData(await api(`/dashboard?${params}`));
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+  useEffect(() => {
+    if (lookup.email || lookup.invoiceId) load();
+  }, []);
+  return (
+    <section className="mx-auto max-w-6xl px-4 py-12">
+      <SectionHeading eyebrow="Customer" title="Dashboard" />
+      <form className="lookup-bar mt-8" onSubmit={load}>
+        <input value={lookup.email} onChange={(event) => setLookup({ ...lookup, email: event.target.value })} placeholder="Email address" />
+        <input value={lookup.invoiceId} onChange={(event) => setLookup({ ...lookup, invoiceId: event.target.value })} placeholder="Invoice ID" />
+        <button className="primary-btn">Access</button>
+      </form>
+      {error && <div className="error-box mt-4">{error}</div>}
+      {data && (
+        <div className="mt-8 grid gap-6 lg:grid-cols-[320px_1fr]">
+          <aside className="summary-panel">
+            <UserCircle className="h-8 w-8 text-cyan-200" />
+            <p className="mt-4 text-white">{data.customer.email || "Invoice access"}</p>
+            <p className="mt-1 text-sm text-slate-400">Balance</p>
+            <p className="text-3xl font-black text-white">{money(data.customer.balance || 0)}</p>
+            <Link href="/support" className="secondary-btn mt-6 w-full justify-center">
+              Support Ticket
+            </Link>
+          </aside>
+          <div className="grid gap-6">
+            <DashboardBlock title="Orders" icon={Package}>
+              {data.orders.length ? data.orders.map((order) => <OrderCard order={order} key={order.id} />) : <p className="text-slate-400">No completed orders found.</p>}
+            </DashboardBlock>
+            <DashboardBlock title="Invoices" icon={Wallet}>
+              {data.invoices.map((invoice) => (
+                <div className="table-row" key={invoice.id}>
+                  <span>{invoice.id}</span>
+                  <span>{invoice.status}</span>
+                  <span>{money(invoice.totalUsd)}</span>
+                </div>
+              ))}
+            </DashboardBlock>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function DashboardBlock({ title, icon: Icon, children }) {
+  return (
+    <div className="admin-panel">
+      <h3 className="mb-5 flex items-center gap-2 text-xl font-black text-white">
+        <Icon className="h-5 w-5 text-cyan-200" /> {title}
+      </h3>
+      {children}
+    </div>
+  );
+}
+
+function OrderCard({ order }) {
+  return (
+    <div className="order-card">
+      <div className="flex items-center justify-between gap-3">
+        <strong className="text-white">{order.id}</strong>
+        <span className="pill">{order.status}</span>
+      </div>
+      <div className="mt-4 grid gap-3">
+        {order.deliveryItems.map((item) => (
+          <div key={item.productId} className="delivery-item">
+            <Download className="h-5 w-5 text-cyan-200" />
+            <div>
+              <p className="font-bold text-white">{item.name}</p>
+              {item.delivered.map((value) => (
+                <code key={value}>{value}</code>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AdminPage({ section }) {
+  const [token, setToken] = useState(localStorage.getItem(ADMIN_TOKEN_KEY) || "");
+  const [login, setLogin] = useState({ email: "admin@zyvora.local", password: "change-this-password" });
+  const [error, setError] = useState("");
+  const [data, setData] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+  const signIn = async (event) => {
+    event.preventDefault();
+    setError("");
+    try {
+      const result = await api("/admin/login", { method: "POST", body: JSON.stringify(login) });
+      localStorage.setItem(ADMIN_TOKEN_KEY, result.token);
+      setToken(result.token);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+  useEffect(() => {
+    if (!token) return;
+    setData(null);
+    const path =
+      section === "products" || section === "categories"
+        ? "/admin/catalog"
+        : section === "orders"
+          ? "/admin/orders"
+          : section === "invoices"
+            ? "/admin/invoices"
+            : section === "settings"
+              ? "/admin/settings"
+              : "/admin/summary";
+    api(path, { headers }).then(setData).catch((err) => setError(err.message));
+  }, [section, token, reloadKey]);
+  if (!token) {
+    return (
+      <section className="mx-auto max-w-md px-4 py-16">
+        <div className="admin-panel">
+          <Lock className="h-8 w-8 text-cyan-200" />
+          <h1 className="mt-4 text-3xl font-black text-white">Admin Login</h1>
+          <form className="mt-6 grid gap-4" onSubmit={signIn}>
+            <label className="field">
+              <span>Email</span>
+              <input value={login.email} onChange={(event) => setLogin({ ...login, email: event.target.value })} />
+            </label>
+            <label className="field">
+              <span>Password</span>
+              <input type="password" value={login.password} onChange={(event) => setLogin({ ...login, password: event.target.value })} />
+            </label>
+            {error && <div className="error-box">{error}</div>}
+            <button className="primary-btn justify-center">Login</button>
+          </form>
+        </div>
+      </section>
+    );
+  }
+  return (
+    <section className="mx-auto max-w-7xl px-4 py-12">
+      <SectionHeading eyebrow="Admin" title="Operations Center" />
+      <div className="mt-8 grid gap-6 lg:grid-cols-[240px_1fr]">
+        <aside className="admin-nav">
+          {[
+            ["overview", LayoutDashboard],
+            ["products", Package],
+            ["categories", Boxes],
+            ["orders", ShoppingCart],
+            ["invoices", Wallet],
+            ["settings", Settings]
+          ].map(([name, Icon]) => (
+            <Link key={name} href={name === "overview" ? "/admin" : `/admin/${name}`} className={section === name ? "active" : ""}>
+              <Icon className="h-4 w-4" /> {name}
+            </Link>
+          ))}
+          <button
+            onClick={() => {
+              localStorage.removeItem(ADMIN_TOKEN_KEY);
+              setToken("");
+            }}
+          >
+            Sign out
+          </button>
+        </aside>
+        <AdminContent section={section} data={data} headers={headers} onChange={() => setReloadKey((value) => value + 1)} />
+      </div>
+    </section>
+  );
+}
+
+const defaultProductForm = {
+  name: "",
+  category: "",
+  price: "0",
+  image: "",
+  badge: "New",
+  stockType: "license_key",
+  stock: "",
+  rating: "0",
+  shortDescription: "",
+  description: "",
+  features: "",
+  requirements: "",
+  deliveryType: "License key"
+};
+
+function listToText(value) {
+  return Array.isArray(value) ? value.join("\n") : String(value || "");
+}
+
+function productToForm(product) {
+  return {
+    name: product.name || "",
+    category: product.category || "",
+    price: String(product.price ?? 0),
+    image: product.image || "",
+    badge: product.badge || "New",
+    stockType: product.stockType || "license_key",
+    stock: listToText(product.stock),
+    rating: String(product.rating ?? 0),
+    shortDescription: product.shortDescription || "",
+    description: product.description || "",
+    features: listToText(product.features),
+    requirements: listToText(product.requirements),
+    deliveryType: product.deliveryType || ""
+  };
+}
+
+function formPayload(form) {
+  return {
+    ...form,
+    price: Number(form.price || 0),
+    rating: Number(form.rating || 0),
+    stock: form.stock.split(/\r?\n/).map((item) => item.trim()).filter(Boolean),
+    features: form.features.split(/\r?\n/).map((item) => item.trim()).filter(Boolean),
+    requirements: form.requirements.split(/\r?\n/).map((item) => item.trim()).filter(Boolean)
+  };
+}
+
+function AdminContent({ section, data, headers, onChange }) {
+  if (!data) return <Loading />;
+  if (section === "products") {
+    return <AdminProducts data={data} headers={headers} onChange={onChange} />;
+  }
+  if (section === "categories") {
+    return <AdminCategories data={data} headers={headers} onChange={onChange} />;
+  }
+  if (section === "invoices") {
+    return (
+      <div className="admin-panel">
+        <h3 className="text-xl font-black text-white">Invoices</h3>
+        <div className="mt-5 grid gap-3">
+          {data.map((invoice) => (
+            <div className="table-row" key={invoice.id}>
+              <span>{invoice.id}</span>
+              <span>{invoice.customerEmail}</span>
+              <span>{invoice.status}</span>
+              <button className="small-btn" onClick={() => api(`/admin/invoices/${invoice.id}/mark-paid`, { method: "POST", body: "{}", headers })}>
+                Mark Paid
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  if (section === "orders") {
+    return (
+      <div className="admin-panel">
+        <h3 className="text-xl font-black text-white">Orders</h3>
+        <div className="mt-5 grid gap-4">{data.map((order) => <OrderCard order={order} key={order.id} />)}</div>
+      </div>
+    );
+  }
+  if (section === "settings") {
+    return (
+      <div className="admin-panel">
+        <h3 className="text-xl font-black text-white">Settings</h3>
+        <div className="mt-5 grid gap-3 md:grid-cols-2">
+          {Object.entries(data).map(([key, value]) => (
+            <DataTile key={key} label={key} value={typeof value === "object" ? JSON.stringify(value) : String(value)} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <DataTile label="Revenue" value={money(data.revenue)} />
+      <DataTile label="Products" value={data.products} />
+      <DataTile label="Invoices" value={data.invoices} />
+      <DataTile label="Customers" value={data.customers} />
+      <div className="admin-panel md:col-span-2 xl:col-span-4">
+        <h3 className="text-xl font-black text-white">Low Stock</h3>
+        <div className="mt-5 grid gap-3">
+          {data.lowStock.length ? data.lowStock.map((product) => <div className="table-row" key={product.id}><span>{product.name}</span><span>{product.stockCount} left</span></div>) : <p className="text-slate-400">No low stock alerts.</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminProducts({ data, headers, onChange }) {
+  const rawCategories = data.categories || [];
+  const catNames = rawCategories.map((c) => c.name || c);
+  const products = data.products || [];
+  const [editingId, setEditingId] = useState("");
+  const [form, setForm] = useState({ ...defaultProductForm, category: catNames[0] || "" });
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const editing = products.find((product) => product.id === editingId);
+
+  useEffect(() => {
+    if (!form.category && catNames[0]) setForm((current) => ({ ...current, category: catNames[0] }));
+  }, [rawCategories]);
+
+  const reset = () => {
+    setEditingId("");
+    setForm({ ...defaultProductForm, category: catNames[0] || "" });
+    setImageFile(null);
+    setImagePreview("");
+    setError("");
+  };
+
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setImageFile(file);
+      setImagePreview(URL.createObjectURL(file));
+    }
+  };
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setError("");
+    setMessage("");
+    try {
+      const path = editingId ? `/admin/products/${editingId}` : "/admin/products";
+      const method = editingId ? "PUT" : "POST";
+      const fd = new FormData();
+      fd.append("name", form.name);
+      fd.append("category", form.category);
+      fd.append("price", form.price);
+      fd.append("badge", form.badge);
+      fd.append("stockType", form.stockType);
+      fd.append("rating", form.rating);
+      fd.append("shortDescription", form.shortDescription);
+      fd.append("description", form.description);
+      fd.append("stock", form.stock);
+      fd.append("features", form.features);
+      fd.append("requirements", form.requirements);
+      fd.append("deliveryType", form.deliveryType);
+      if (imageFile) fd.append("image", imageFile);
+      else if (form.image) fd.append("image", form.image);
+      await api(path, { method, headers, body: fd });
+      setMessage(editingId ? "Product updated." : "Product created.");
+      reset();
+      onChange();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const remove = async (product) => {
+    if (!confirm(`Delete "${product.name}"?`)) return;
+    setError("");
+    setMessage("");
+    try {
+      await api(`/admin/products/${product.id}`, { method: "DELETE", headers });
+      setMessage(`${product.name} deleted.`);
+      if (editingId === product.id) reset();
+      onChange();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const currentPreview = imagePreview || form.image || "";
+
+  return (
+    <div className="admin-workspace">
+      <div className="admin-panel">
+        <div className="admin-panel-head">
+          <div>
+            <h3>{editing ? "Edit Product" : "Add Product"}</h3>
+            <p>Create products, assign categories, upload images, and paste stock keys one per line.</p>
+          </div>
+          {editing && <button className="small-btn" onClick={reset}>New Product</button>}
+        </div>
+        {(message || error) && <AdminNotice message={message || error} tone={error ? "error" : "success"} />}
+        <form className="admin-form" onSubmit={submit}>
+          <AdminField label="Product name">
+            <input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Product name" />
+          </AdminField>
+          <AdminField label="Category">
+            <select required value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>
+              <option value="">Select category</option>
+              {catNames.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+          </AdminField>
+          <AdminField label="Price USD">
+            <input type="number" min="0" step="0.01" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} />
+          </AdminField>
+          <AdminField label="Badge">
+            <input value={form.badge} onChange={(event) => setForm({ ...form, badge: event.target.value })} placeholder="Popular" />
+          </AdminField>
+          <AdminField label="Product Image" wide>
+            <div className="flex items-start gap-4">
+              <label className="upload-area">
+                <Upload className="h-5 w-5 text-cyan-200" />
+                <span>Click to upload image</span>
+                <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
+              </label>
+              {currentPreview && <img src={currentPreview} alt="Preview" className="h-20 w-20 rounded-lg object-cover border border-cyan-400/20" />}
+            </div>
+            <input value={form.image} onChange={(event) => setForm({ ...form, image: event.target.value })} placeholder="Or paste image URL..." className="mt-2" />
+          </AdminField>
+          <AdminField label="Stock type">
+            <select value={form.stockType} onChange={(event) => setForm({ ...form, stockType: event.target.value })}>
+              <option value="license_key">License key</option>
+              <option value="download_file">Download file</option>
+              <option value="text_credentials">Text credentials</option>
+              <option value="private_link">Private link</option>
+              <option value="manual">Manual delivery</option>
+            </select>
+          </AdminField>
+          <AdminField label="Short description" wide>
+            <input value={form.shortDescription} onChange={(event) => setForm({ ...form, shortDescription: event.target.value })} placeholder="Short card description" />
+          </AdminField>
+          <AdminField label="Full description" wide>
+            <textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Full product page description" />
+          </AdminField>
+          <AdminField label="Stock / keys / files" wide>
+            <textarea value={form.stock} onChange={(event) => setForm({ ...form, stock: event.target.value })} placeholder={"KEY-001\nKEY-002\ndownload-link.zip"} />
+          </AdminField>
+          <AdminField label="Features" wide>
+            <textarea value={form.features} onChange={(event) => setForm({ ...form, features: event.target.value })} placeholder={"Instant delivery\nDiscord support\nLifetime updates"} />
+          </AdminField>
+          <AdminField label="Requirements" wide>
+            <textarea value={form.requirements} onChange={(event) => setForm({ ...form, requirements: event.target.value })} placeholder={"Compatible client\nBasic install knowledge"} />
+          </AdminField>
+          <AdminField label="Delivery label">
+            <input value={form.deliveryType} onChange={(event) => setForm({ ...form, deliveryType: event.target.value })} placeholder="License key and private download link" />
+          </AdminField>
+          <AdminField label="Rating">
+            <input type="number" min="0" max="5" step="0.1" value={form.rating} onChange={(event) => setForm({ ...form, rating: event.target.value })} />
+          </AdminField>
+          <div className="admin-form-actions">
+            <button className="primary-btn">{editing ? "Save Product" : "Create Product"}</button>
+            <button className="secondary-btn" type="button" onClick={reset}>Clear</button>
+          </div>
+        </form>
+      </div>
+
+      <div className="admin-panel">
+        <div className="admin-panel-head">
+          <div>
+            <h3>Products</h3>
+            <p>{products.length} products across {catNames.length} categories.</p>
+          </div>
+        </div>
+        <div className="admin-list">
+          {products.map((product) => (
+            <div className="admin-product-row" key={product.id}>
+              {product.image ? <img src={product.image} alt={product.name} /> : <div className="admin-product-noimg"><Image className="h-6 w-6 text-slate-500" /></div>}
+              <div>
+                <strong>{product.name}</strong>
+                <span>{product.category} &bull; {money(product.price)} &bull; {product.stockCount ?? 0} in stock</span>
+              </div>
+              <div className="admin-row-actions">
+                <button className="small-btn" onClick={() => {
+                  setEditingId(product.id);
+                  setForm(productToForm(product));
+                  setImageFile(null);
+                  setImagePreview("");
+                  setMessage("");
+                  setError("");
+                }}>
+                  Edit
+                </button>
+                <button className="small-btn danger" onClick={() => remove(product)}>Delete</button>
+              </div>
+            </div>
+          ))}
+          {products.length === 0 && <p className="text-slate-400 py-4">No products yet. Create your first product above.</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminCategories({ data, headers, onChange }) {
+  const categories = data.categories || [];
+  const products = data.products || [];
+  const [name, setName] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [catImageFile, setCatImageFile] = useState(null);
+  const [catImagePreview, setCatImagePreview] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  const resetCat = () => { setEditingId(null); setName(""); setCatImageFile(null); setCatImagePreview(""); setError(""); };
+
+  const handleCatImage = (e) => {
+    const file = e.target.files[0];
+    if (file) { setCatImageFile(file); setCatImagePreview(URL.createObjectURL(file)); }
+  };
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setError("");
+    setMessage("");
+    try {
+      const fd = new FormData();
+      fd.append("name", name);
+      if (catImageFile) fd.append("image", catImageFile);
+      if (editingId) {
+        await api(`/admin/categories/${editingId}`, { method: "PUT", headers, body: fd });
+        setMessage("Category updated.");
+      } else {
+        await api("/admin/categories", { method: "POST", headers, body: fd });
+        setMessage("Category created.");
+      }
+      resetCat();
+      onChange();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const remove = async (cat) => {
+    if (!confirm(`Delete category "${cat.name}"?`)) return;
+    setError("");
+    setMessage("");
+    try {
+      await api(`/admin/categories/${cat.id}`, { method: "DELETE", headers });
+      setMessage("Category deleted.");
+      onChange();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  return (
+    <div className="admin-workspace">
+      <div className="admin-panel">
+        <div className="admin-panel-head">
+          <div>
+            <h3>{editingId ? "Edit Category" : "Create Category"}</h3>
+            <p>Categories appear in product forms, filters, and storefront browse links.</p>
+          </div>
+        </div>
+        {(message || error) && <AdminNotice message={message || error} tone={error ? "error" : "success"} />}
+        <form className="admin-inline-form" onSubmit={submit}>
+          <label className="field">
+            <span>Category name</span>
+            <input required value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Accounts" />
+          </label>
+          <label className="field">
+            <span>Category image</span>
+            <div className="flex items-center gap-3">
+              <label className="upload-area small">
+                <Upload className="h-4 w-4 text-cyan-200" />
+                <span>Upload</span>
+                <input type="file" accept="image/*" onChange={handleCatImage} className="hidden" />
+              </label>
+              {catImagePreview && <img src={catImagePreview} alt="Preview" className="h-12 w-12 rounded object-cover border border-cyan-400/20" />}
+            </div>
+          </label>
+          <button className="primary-btn">{editingId ? "Save Category" : "Add Category"}</button>
+          {editingId && <button type="button" className="secondary-btn" onClick={resetCat}>Cancel</button>}
+        </form>
+      </div>
+
+      <div className="admin-panel">
+        <div className="admin-panel-head">
+          <div>
+            <h3>Manage Categories</h3>
+            <p>{categories.length} active categories.</p>
+          </div>
+        </div>
+        <div className="admin-list">
+          {categories.map((cat) => {
+            const catName = cat.name || cat;
+            const count = products.filter((p) => p.category === catName).length;
+            return (
+              <div className="admin-category-row" key={cat.id || catName}>
+                {cat.image ? <img src={cat.image} alt={catName} className="h-10 w-10 rounded object-cover" /> : <div className="h-10 w-10 rounded bg-cyan-900/30 flex items-center justify-center"><Boxes className="h-5 w-5 text-slate-500" /></div>}
+                <div>
+                  <strong>{catName}</strong>
+                  <span>{count} product{count === 1 ? "" : "s"}</span>
+                </div>
+                <div className="admin-row-actions">
+                  <button className="small-btn" onClick={() => { setEditingId(cat.id); setName(catName); setCatImageFile(null); setCatImagePreview(cat.image || ""); setError(""); setMessage(""); }}>Edit</button>
+                  <button className="small-btn danger" onClick={() => remove(cat)}>Delete</button>
+                </div>
+              </div>
+            );
+          })}
+          {categories.length === 0 && <p className="text-slate-400 py-4">No categories yet. Create your first category above.</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminField({ label, children, wide = false }) {
+  return (
+    <label className={wide ? "field admin-field-wide" : "field"}>
+      <span>{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function AdminNotice({ message, tone }) {
+  return <div className={tone === "error" ? "admin-notice error" : "admin-notice success"}>{message}</div>;
+}
+
+function FaqSection() {
+  const faq = [
+    ["What happens after I purchase?", "Your invoice is created, payment is monitored server-side, and eligible products are delivered automatically after confirmation."],
+    ["What payment methods do you support?", "Litecoin, Bitcoin, Solana, Ethereum, PayPal Friends & Family, and customer balance."],
+    ["How fast is delivery?", "Crypto orders unlock after the configured confirmation count. License keys, files, credentials, and private links can be delivered instantly."],
+    ["Need help?", "Use the support page or Discord support server for order help."],
+    ["Refund policy", "Digital products are final once delivered unless stock is invalid, duplicate, or cannot be replaced."],
+    ["Crypto payment confirmation time", "Times depend on chain congestion and configured confirmation requirements."]
+  ];
+  return (
+    <section className="container-shell section-space">
+      <SectionHeading eyebrow="Help" title="FAQ" text="Clear answers for payment, delivery, support, and refund expectations." />
+      <div className="faq-grid mt-8">
+        {faq.map(([question, answer]) => (
+          <details className="faq-item premium-hover" key={question}>
+            <summary>
+              {question}
+              <Plus className="h-4 w-4" />
+            </summary>
+            <p>{answer}</p>
+          </details>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function PolicyPage({ type }) {
+  const isTerms = type === "terms";
+  return (
+    <section className="mx-auto max-w-4xl px-4 py-12">
+      <SectionHeading eyebrow="Policy" title={isTerms ? "Terms of Service" : "Privacy Policy"} />
+      <div className="policy-copy mt-8">
+        {isTerms ? (
+          <>
+            <p>Digital products are delivered electronically. Customers are responsible for confirming product compatibility before purchase.</p>
+            <p>Crypto invoices must be paid with the exact amount before expiration. Underpaid, overpaid, failed, or expired invoices require support review.</p>
+            <p>Refunds are handled case by case for invalid stock, duplicate delivery, or products that cannot be replaced.</p>
+          </>
+        ) : (
+          <>
+            <p>Customer email, invoice records, delivery logs, and support identifiers are stored for order fulfillment and fraud prevention.</p>
+            <p>Private keys, seed phrases, wallet secrets, API secrets, and SMTP credentials belong only in server environment variables.</p>
+            <p>Payment checks are performed on the backend. Admin access requires authentication and should be served over HTTPS in production.</p>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function SupportPage() {
+  return (
+    <section className="mx-auto max-w-5xl px-4 py-12">
+      <SectionHeading eyebrow="Support" title="Get Help" />
+      <div className="mt-8 grid gap-4 md:grid-cols-2">
+        <a className="support-card" href="https://discord.gg/your-server">
+          <MessageCircle className="h-7 w-7 text-cyan-200" />
+          <h3>Discord Support</h3>
+          <p>Open a ticket with your invoice ID and email address.</p>
+          <ExternalLink className="h-5 w-5" />
+        </a>
+        <a className="support-card" href="mailto:support@zyvora.local">
+          <Mail className="h-7 w-7 text-cyan-200" />
+          <h3>Email Support</h3>
+          <p>Use email for delivery issues, replacement checks, and manual orders.</p>
+          <ExternalLink className="h-5 w-5" />
+        </a>
+      </div>
+    </section>
+  );
+}
+
+function Footer() {
+  return (
+    <footer className="site-footer">
+      <div className="container-shell footer-grid">
+        <div>
+          <Link href="/" className="brand-lockup">
+            <span className="brand-mark">
+              <Zap className="h-5 w-5 text-cyan-200" />
+            </span>
+            <span>
+              <span className="brand-name">ZYVORA</span>
+              <span className="brand-subtitle">Digital Market</span>
+            </span>
+          </Link>
+          <p className="mt-5 max-w-md text-sm leading-7 text-[#9CB6C9]">
+            Premium digital products, crypto invoices, protected delivery records, and a customer dashboard built for serious gaming commerce.
+          </p>
+        </div>
+        <div className="footer-links">
+          <Link href="/terms">Terms</Link>
+          <Link href="/privacy">Privacy</Link>
+          <Link href="/support">Support</Link>
+          <a href="https://discord.gg/your-server">Discord</a>
+        </div>
+      </div>
+      <div className="container-shell footer-bottom">
+        <span>Copyright 2026 ZYVORA Digital Market.</span>
+        <span>Secure checkout logic. Server-side payment verification.</span>
+      </div>
+    </footer>
+  );
+}
+
+function Loading() {
+  return <div className="mx-auto max-w-7xl px-4 py-20 text-cyan-200">Loading...</div>;
+}
+
+function ErrorMessage({ message }) {
+  return (
+    <div className="mx-auto max-w-3xl px-4 py-20">
+      <div className="error-box flex items-center gap-3">
+        <AlertTriangle className="h-5 w-5" />
+        {message}
+      </div>
+    </div>
+  );
+}
+
+function NotFound() {
+  return (
+    <section className="mx-auto max-w-3xl px-4 py-20">
+      <h1 className="text-4xl font-black text-white">Page not found</h1>
+      <Link href="/" className="primary-btn mt-6">
+        Back Home
+      </Link>
+    </section>
+  );
+}
+
+createRoot(document.getElementById("root")).render(<App />);
