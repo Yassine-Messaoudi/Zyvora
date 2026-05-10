@@ -369,19 +369,19 @@ function HomePage() {
 function HeroSection() {
   return (
     <section className="zy-hero">
-      <div className="hero-bg-image" />
-      <div className="hero-bg-overlay" />
+      <div className="hero-bg-image" aria-hidden="true" />
+      <div className="hero-bg-overlay" aria-hidden="true" />
       <div className="zy-hero-shell">
         <motion.div className="zy-hero-copy" initial={{ opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55 }}>
           <div className="eyebrow-badge">
-            <ShieldCheck className="h-4 w-4" /> Verified Digital Products
+            <ShieldCheck className="h-4 w-4" /> Verified digital marketplace
           </div>
           <h1>
-            Your Gaming Marketplace,
-            <span> Instant Delivery.</span>
+            Premium digital products.
+            <span>Instant delivery.</span>
           </h1>
           <p className="hero-lede">
-            Secure crypto payments, verified game accounts, instant key delivery, and a personal dashboard for every purchase.
+            A cleaner marketplace for accounts, keys, scripts, tools, and private links with verified stock, crypto invoices, and instant dashboard access.
           </p>
           <div className="hero-actions">
             <Link href="/products" className="primary-btn">
@@ -392,9 +392,38 @@ function HeroSection() {
             </a>
           </div>
           <div className="hero-trust-row">
-            <span><ShieldCheck className="h-4 w-4" /> Verified Stock</span>
-            <span><Zap className="h-4 w-4" /> Instant Delivery</span>
-            <span><Wallet className="h-4 w-4" /> Crypto Payments</span>
+            <span><ShieldCheck className="h-4 w-4" /> Verified stock</span>
+            <span><Zap className="h-4 w-4" /> Instant delivery</span>
+            <span><Wallet className="h-4 w-4" /> LTC / BTC / SOL / ETH</span>
+          </div>
+        </motion.div>
+        <motion.div className="hero-market-card" initial={{ opacity: 0, y: 24, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.65, delay: 0.08 }}>
+          <div className="hero-market-top">
+            <span className="live-dot" />
+            <strong>ZYVORA LIVE STOCK</strong>
+            <span>Updated now</span>
+          </div>
+          <div className="hero-character-window">
+            <img src="/images/hero-reference-characters.png" alt="Zyvora digital marketplace squad" />
+            <div className="hero-price-chip"><BadgeDollarSign className="h-4 w-4" /> From $4.99</div>
+          </div>
+          <div className="hero-market-list">
+            {[
+              ["ChatGPT Accounts", "Accounts", "In stock"],
+              ["FiveM Tools", "Scripts", "Instant"],
+              ["Valorant Access", "Games", "Verified"]
+            ].map(([name, type, status]) => (
+              <div className="hero-market-row" key={name}>
+                <span><Package className="h-4 w-4" /></span>
+                <div><strong>{name}</strong><small>{type}</small></div>
+                <em>{status}</em>
+              </div>
+            ))}
+          </div>
+          <div className="hero-payment-strip">
+            <span>15m invoice</span>
+            <span>Auto delivery</span>
+            <span>Dashboard logs</span>
           </div>
         </motion.div>
       </div>
