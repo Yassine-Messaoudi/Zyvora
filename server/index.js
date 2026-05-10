@@ -26,18 +26,14 @@ import { assignDepositAddress, calculateCryptoAmount, checkBlockchain, createQrD
 import { sendDeliveryEmail, sendDiscordWebhook } from "./delivery.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const uploadsDir = path.join(__dirname, "..", "public", "uploads");
-fs.mkdirSync(uploadsDir, { recursive: true });
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadsDir),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `${Date.now()}-${randomUUID().slice(0, 8)}${ext}`);
-  }
-});
+function fileToDataUrl(file) {
+  const mime = file.mimetype || "image/png";
+  return `data:${mime};base64,${file.buffer.toString("base64")}`;
+}
+
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const allowed = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"];
@@ -51,8 +47,8 @@ const jwtSecret = process.env.JWT_SECRET || "dev-only-change-this-secret";
 
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: process.env.CLIENT_ORIGIN || "*" }));
-app.use(express.json({ limit: "2mb" }));
-app.use("/uploads", express.static(uploadsDir));
+app.use(express.json({ limit: "10mb" }));
+// images are stored as base64 data URLs in the database, no static uploads dir needed
 
 const checkoutLimiter = rateLimit({ windowMs: 60_000, limit: 12 });
 const adminLimiter = rateLimit({ windowMs: 60_000, limit: 20 });
@@ -360,7 +356,7 @@ app.post("/api/admin/categories", auth, upload.single("image"), async (req, res)
   try {
     const name = String(req.body.name || "").trim();
     if (!name) throw new Error("Category name is required");
-    const image = req.file ? `/uploads/${req.file.filename}` : (req.body.image || null);
+    const image = req.file ? fileToDataUrl(req.file) : (req.body.image || null);
     const cat = await createCategory(name, image);
     res.status(201).json(cat);
   } catch (error) {
@@ -373,7 +369,7 @@ app.put("/api/admin/categories/:id", auth, upload.single("image"), async (req, r
     const id = Number(req.params.id);
     const data = {};
     if (req.body.name) data.name = req.body.name;
-    if (req.file) data.image = `/uploads/${req.file.filename}`;
+    if (req.file) data.image = fileToDataUrl(req.file);
     else if (req.body.image !== undefined) data.image = req.body.image;
     const cat = await updateCategory(id, data);
     res.json(cat);
@@ -394,7 +390,7 @@ app.delete("/api/admin/categories/:id", auth, async (req, res) => {
 app.post("/api/admin/products", auth, upload.single("image"), async (req, res) => {
   try {
     const body = req.body;
-    const image = req.file ? `/uploads/${req.file.filename}` : (body.image || null);
+    const image = req.file ? fileToDataUrl(req.file) : (body.image || null);
     const product = await createProduct({
       id: `prod_${randomUUID().slice(0, 8)}`,
       name: String(body.name || "").trim(),
@@ -402,14 +398,9 @@ app.post("/api/admin/products", auth, upload.single("image"), async (req, res) =
       price: Number(body.price || 0),
       image,
       badge: body.badge || "New",
-      stockType: body.stockType || "license_key",
-      rating: Number(body.rating || 0),
+      stockCount: Number(body.stockCount || 0),
       shortDescription: body.shortDescription || "",
-      description: body.description || "",
-      features: normalizeList(body.features),
-      requirements: normalizeList(body.requirements),
-      deliveryType: body.deliveryType || "Secure delivery",
-      stock: normalizeList(body.stock)
+      description: body.description || ""
     });
     res.status(201).json(product);
   } catch (error) {
@@ -424,17 +415,12 @@ app.put("/api/admin/products/:id", auth, upload.single("image"), async (req, res
     if (body.name) data.name = String(body.name).trim();
     if (body.category) data.category = String(body.category).trim();
     if (body.price !== undefined) data.price = Number(body.price);
-    if (req.file) data.image = `/uploads/${req.file.filename}`;
+    if (req.file) data.image = fileToDataUrl(req.file);
     else if (body.image !== undefined) data.image = body.image;
     if (body.badge) data.badge = body.badge;
-    if (body.stockType) data.stockType = body.stockType;
-    if (body.rating !== undefined) data.rating = Number(body.rating);
+    if (body.stockCount !== undefined) data.stockCount = Number(body.stockCount);
     if (body.shortDescription !== undefined) data.shortDescription = body.shortDescription;
     if (body.description !== undefined) data.description = body.description;
-    if (body.features !== undefined) data.features = normalizeList(body.features);
-    if (body.requirements !== undefined) data.requirements = normalizeList(body.requirements);
-    if (body.deliveryType !== undefined) data.deliveryType = body.deliveryType;
-    if (body.stock !== undefined) data.stock = normalizeList(body.stock);
     const product = await updateProduct(req.params.id, data);
     if (!product) return res.status(404).json({ error: "Product not found" });
     res.json(product);
@@ -450,7 +436,7 @@ app.delete("/api/admin/products/:id", auth, async (req, res) => {
 
 app.post("/api/admin/upload", auth, upload.single("image"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-  res.json({ url: `/uploads/${req.file.filename}` });
+  res.json({ url: fileToDataUrl(req.file) });
 });
 
 app.get("/api/admin/invoices", auth, async (_req, res) => {

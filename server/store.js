@@ -14,6 +14,7 @@ function camelToSnake(s) {
 
 function normalizeProductRow(row) {
   if (!row) return null;
+  const stockCount = Number(row.stock_count || 0);
   return {
     id: row.id,
     slug: row.slug,
@@ -23,15 +24,10 @@ function normalizeProductRow(row) {
     price: Number(row.price),
     image: row.image,
     badge: row.badge,
-    stockType: row.stock_type,
-    rating: Number(row.rating),
     shortDescription: row.short_description,
     description: row.description,
-    features: parseJson(row.features),
-    requirements: parseJson(row.requirements),
-    deliveryType: row.delivery_type,
-    stockCount: Number(row.stock_count || 0),
-    stockStatus: Number(row.stock_count || 0) > 0 ? "In stock" : "Out of stock",
+    stockCount,
+    stockStatus: stockCount > 0 ? "In stock" : "Out of stock",
     createdAt: row.created_at
   };
 }
@@ -168,8 +164,7 @@ export async function deleteCategory(id) {
 // ── Products ──
 
 const PRODUCT_SELECT = `
-  SELECT p.*, c.name as category,
-  (SELECT COUNT(*) FROM product_stock ps WHERE ps.product_id = p.id AND ps.is_sold = 0) as stock_count
+  SELECT p.*, c.name as category
   FROM products p
   LEFT JOIN categories c ON p.category_id = c.id
 `;
@@ -190,7 +185,8 @@ export async function getProductBySlug(slug) {
 }
 
 export async function getProductStock(productId) {
-  return query("SELECT * FROM product_stock WHERE product_id = ? AND is_sold = 0 ORDER BY id ASC", [productId]);
+  const row = await queryOne("SELECT stock_count FROM products WHERE id = ?", [productId]);
+  return row ? Number(row.stock_count) : 0;
 }
 
 export async function createProduct(data) {
@@ -198,21 +194,14 @@ export async function createProduct(data) {
   const slug = await uniqueSlug(data.name);
   const categoryId = await resolveCategoryId(data.category);
   await query(`
-    INSERT INTO products (id, slug, name, category_id, price, image, badge, stock_type, rating,
-    short_description, description, features, requirements, delivery_type)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO products (id, slug, name, category_id, price, image, badge, stock_count,
+    short_description, description)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     id, slug, data.name, categoryId, data.price || 0, data.image || null,
-    data.badge || "New", data.stockType || "license_key", data.rating || 0,
-    data.shortDescription || "", data.description || "",
-    JSON.stringify(data.features || []), JSON.stringify(data.requirements || []),
-    data.deliveryType || "Secure delivery"
+    data.badge || "New", Number(data.stockCount) || 0,
+    data.shortDescription || "", data.description || ""
   ]);
-  if (data.stock && data.stock.length > 0) {
-    for (const item of data.stock) {
-      await query("INSERT INTO product_stock (product_id, stock_value) VALUES (?, ?)", [id, item]);
-    }
-  }
   return getProductById(id);
 }
 
@@ -224,47 +213,27 @@ export async function updateProduct(id, data) {
   const slug = await uniqueSlug(name, id);
   await query(`
     UPDATE products SET slug=?, name=?, category_id=?, price=?, image=?, badge=?,
-    stock_type=?, rating=?, short_description=?, description=?,
-    features=?, requirements=?, delivery_type=? WHERE id=?
+    stock_count=?, short_description=?, description=? WHERE id=?
   `, [
     slug, name, categoryId,
     data.price !== undefined ? data.price : existing.price,
     data.image !== undefined ? data.image : existing.image,
     data.badge || existing.badge,
-    data.stockType || existing.stockType,
-    data.rating !== undefined ? data.rating : existing.rating,
+    data.stockCount !== undefined ? Number(data.stockCount) : existing.stockCount,
     data.shortDescription !== undefined ? data.shortDescription : existing.shortDescription,
     data.description !== undefined ? data.description : existing.description,
-    JSON.stringify(data.features || existing.features || []),
-    JSON.stringify(data.requirements || existing.requirements || []),
-    data.deliveryType || existing.deliveryType,
     id
   ]);
-  if (data.stock !== undefined) {
-    await query("DELETE FROM product_stock WHERE product_id = ? AND is_sold = 0", [id]);
-    for (const item of data.stock) {
-      await query("INSERT INTO product_stock (product_id, stock_value) VALUES (?, ?)", [id, item]);
-    }
-  }
   return getProductById(id);
 }
 
 export async function deleteProduct(id) {
-  await query("DELETE FROM product_stock WHERE product_id = ?", [id]);
   await query("DELETE FROM products WHERE id = ?", [id]);
 }
 
 export async function consumeStock(productId, quantity, invoiceId) {
-  const items = await query(
-    "SELECT * FROM product_stock WHERE product_id = ? AND is_sold = 0 ORDER BY id ASC LIMIT ?",
-    [productId, quantity]
-  );
-  const delivered = [];
-  for (const item of items) {
-    await query("UPDATE product_stock SET is_sold = 1, sold_at = NOW(), invoice_id = ? WHERE id = ?", [invoiceId, item.id]);
-    delivered.push(item.stock_value);
-  }
-  return delivered;
+  await query("UPDATE products SET stock_count = GREATEST(stock_count - ?, 0) WHERE id = ?", [quantity, productId]);
+  return [`${quantity}x delivered`];
 }
 
 // ── Public product (strip sensitive data) ──
@@ -279,13 +248,8 @@ export function publicProduct(product) {
     price: product.price,
     image: product.image,
     badge: product.badge,
-    stockType: product.stockType,
-    rating: product.rating,
     shortDescription: product.shortDescription,
     description: product.description,
-    features: product.features,
-    requirements: product.requirements,
-    deliveryType: product.deliveryType,
     stockCount: product.stockCount,
     stockStatus: product.stockStatus,
     createdAt: product.createdAt
@@ -440,8 +404,8 @@ export async function getAdminSummary() {
   const customerCount = await queryOne("SELECT COUNT(*) as cnt FROM customers");
   const lowStock = await query(`
     ${PRODUCT_SELECT}
-    HAVING stock_count <= 1
-    ORDER BY stock_count ASC
+    WHERE p.stock_count <= 1
+    ORDER BY p.stock_count ASC
   `);
   return {
     revenue: Number(revenue.total),

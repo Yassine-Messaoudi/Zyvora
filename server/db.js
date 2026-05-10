@@ -44,11 +44,14 @@ export async function initDatabase() {
     CREATE TABLE IF NOT EXISTS categories (
       id INT AUTO_INCREMENT PRIMARY KEY,
       name VARCHAR(255) NOT NULL UNIQUE,
-      image VARCHAR(500) DEFAULT NULL,
+      image LONGTEXT DEFAULT NULL,
       sort_order INT DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `);
+
+  // Migrate existing VARCHAR columns to LONGTEXT for base64 images
+  await db.execute(`ALTER TABLE categories MODIFY COLUMN image LONGTEXT DEFAULT NULL`).catch(() => {});
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS products (
@@ -57,20 +60,20 @@ export async function initDatabase() {
       name VARCHAR(255) NOT NULL,
       category_id INT NOT NULL,
       price DECIMAL(10,2) NOT NULL DEFAULT 0,
-      image VARCHAR(500) DEFAULT NULL,
+      image LONGTEXT DEFAULT NULL,
       badge VARCHAR(50) DEFAULT 'New',
-      stock_type ENUM('license_key','download_file','text_credentials','private_link','manual') DEFAULT 'license_key',
-      rating DECIMAL(2,1) DEFAULT 0,
+      stock_count INT NOT NULL DEFAULT 0,
       short_description TEXT,
       description TEXT,
-      features JSON,
-      requirements JSON,
-      delivery_type VARCHAR(255) DEFAULT 'Secure delivery',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       FOREIGN KEY (category_id) REFERENCES categories(id) ON UPDATE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `);
+
+  // Migrate existing databases
+  await db.execute(`ALTER TABLE products MODIFY COLUMN image LONGTEXT DEFAULT NULL`).catch(() => {});
+  await db.execute(`ALTER TABLE products ADD COLUMN stock_count INT NOT NULL DEFAULT 0`).catch(() => {});
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS product_stock (

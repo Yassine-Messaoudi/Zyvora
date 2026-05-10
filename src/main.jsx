@@ -603,11 +603,12 @@ function ProductDetail({ slug }) {
   if (product === false) return <NotFound />;
   if (!product) return <Loading />;
   const inStock = product.stockCount > 0;
-  const specs = [];
-  if (product.stockType) specs.push(["Product Type", product.stockType.replace(/_/g, " ")]);
-  if (product.requirements?.length) specs.push(["Compatibility", product.requirements.join(", ")]);
-  if (product.deliveryType) specs.push(["Delivery", product.deliveryType]);
-  specs.push(["Stock", inStock ? `${product.stockCount} in stock` : "Out of stock"]);
+  const specs = [
+    ["Product", product.category || product.name],
+    ["Login", "Email & Password"],
+    ["Access", "Full Access"],
+    ["Delivery", "Instant Delivery"]
+  ];
   const total = (product.price * qty).toFixed(2);
   return (
     <section className="mx-auto max-w-7xl px-4 py-12">
@@ -640,7 +641,7 @@ function ProductDetail({ slug }) {
         </div>
         <div>
           <div className="flex flex-wrap gap-2">
-            <span className="pill accent"><Rocket className="h-3.5 w-3.5" /> {product.deliveryType || "Instant Delivery"}</span>
+            <span className="pill accent"><Rocket className="h-3.5 w-3.5" /> Instant Delivery</span>
           </div>
           <h1 className="mt-3 text-3xl font-black text-white sm:text-4xl">{product.name}</h1>
           {specs.length > 0 && (
@@ -1180,14 +1181,9 @@ const defaultProductForm = {
   price: "0",
   image: "",
   badge: "New",
-  stockType: "license_key",
-  stock: "",
-  rating: "0",
+  stockCount: "0",
   shortDescription: "",
-  description: "",
-  features: "",
-  requirements: "",
-  deliveryType: "License key"
+  description: ""
 };
 
 function listToText(value) {
@@ -1201,14 +1197,9 @@ function productToForm(product) {
     price: String(product.price ?? 0),
     image: product.image || "",
     badge: product.badge || "New",
-    stockType: product.stockType || "license_key",
-    stock: listToText(product.stock),
-    rating: String(product.rating ?? 0),
+    stockCount: String(product.stockCount ?? 0),
     shortDescription: product.shortDescription || "",
-    description: product.description || "",
-    features: listToText(product.features),
-    requirements: listToText(product.requirements),
-    deliveryType: product.deliveryType || ""
+    description: product.description || ""
   };
 }
 
@@ -1216,10 +1207,7 @@ function formPayload(form) {
   return {
     ...form,
     price: Number(form.price || 0),
-    rating: Number(form.rating || 0),
-    stock: form.stock.split(/\r?\n/).map((item) => item.trim()).filter(Boolean),
-    features: form.features.split(/\r?\n/).map((item) => item.trim()).filter(Boolean),
-    requirements: form.requirements.split(/\r?\n/).map((item) => item.trim()).filter(Boolean)
+    stockCount: Number(form.stockCount || 0)
   };
 }
 
@@ -1330,14 +1318,9 @@ function AdminProducts({ data, headers, onChange }) {
       fd.append("category", form.category);
       fd.append("price", form.price);
       fd.append("badge", form.badge);
-      fd.append("stockType", form.stockType);
-      fd.append("rating", form.rating);
+      fd.append("stockCount", form.stockCount);
       fd.append("shortDescription", form.shortDescription);
       fd.append("description", form.description);
-      fd.append("stock", form.stock);
-      fd.append("features", form.features);
-      fd.append("requirements", form.requirements);
-      fd.append("deliveryType", form.deliveryType);
       if (imageFile) fd.append("image", imageFile);
       else if (form.image) fd.append("image", form.image);
       await api(path, { method, headers, body: fd });
@@ -1371,7 +1354,7 @@ function AdminProducts({ data, headers, onChange }) {
         <div className="admin-panel-head">
           <div>
             <h3>{editing ? "Edit Product" : "Add Product"}</h3>
-            <p>Create products, assign categories, upload images, and paste stock keys one per line.</p>
+            <p>Create products, assign categories, upload images, and set stock count.</p>
           </div>
           {editing && <button className="small-btn" onClick={reset}>New Product</button>}
         </div>
@@ -1403,35 +1386,14 @@ function AdminProducts({ data, headers, onChange }) {
             </div>
             <input value={form.image} onChange={(event) => setForm({ ...form, image: event.target.value })} placeholder="Or paste image URL..." className="mt-2" />
           </AdminField>
-          <AdminField label="Stock type">
-            <select value={form.stockType} onChange={(event) => setForm({ ...form, stockType: event.target.value })}>
-              <option value="license_key">License key</option>
-              <option value="download_file">Download file</option>
-              <option value="text_credentials">Text credentials</option>
-              <option value="private_link">Private link</option>
-              <option value="manual">Manual delivery</option>
-            </select>
+          <AdminField label="Stock Count">
+            <input type="number" min="0" value={form.stockCount} onChange={(event) => setForm({ ...form, stockCount: event.target.value })} placeholder="Number in stock" />
           </AdminField>
           <AdminField label="Short description" wide>
             <input value={form.shortDescription} onChange={(event) => setForm({ ...form, shortDescription: event.target.value })} placeholder="Short card description" />
           </AdminField>
           <AdminField label="Full description" wide>
             <textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Full product page description" />
-          </AdminField>
-          <AdminField label="Stock / keys / files" wide>
-            <textarea value={form.stock} onChange={(event) => setForm({ ...form, stock: event.target.value })} placeholder={"KEY-001\nKEY-002\ndownload-link.zip"} />
-          </AdminField>
-          <AdminField label="Features" wide>
-            <textarea value={form.features} onChange={(event) => setForm({ ...form, features: event.target.value })} placeholder={"Instant delivery\nDiscord support\nLifetime updates"} />
-          </AdminField>
-          <AdminField label="Requirements" wide>
-            <textarea value={form.requirements} onChange={(event) => setForm({ ...form, requirements: event.target.value })} placeholder={"Compatible client\nBasic install knowledge"} />
-          </AdminField>
-          <AdminField label="Delivery label">
-            <input value={form.deliveryType} onChange={(event) => setForm({ ...form, deliveryType: event.target.value })} placeholder="License key and private download link" />
-          </AdminField>
-          <AdminField label="Rating">
-            <input type="number" min="0" max="5" step="0.1" value={form.rating} onChange={(event) => setForm({ ...form, rating: event.target.value })} />
           </AdminField>
           <div className="admin-form-actions">
             <button className="primary-btn">{editing ? "Save Product" : "Create Product"}</button>
