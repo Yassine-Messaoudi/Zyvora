@@ -50,7 +50,7 @@ const port = Number(process.env.PORT || 8787);
 const jwtSecret = process.env.JWT_SECRET || "dev-only-change-this-secret";
 
 app.use(helmet({ contentSecurityPolicy: false }));
-app.use(cors({ origin: process.env.CLIENT_ORIGIN || "http://127.0.0.1:5173" }));
+app.use(cors({ origin: process.env.CLIENT_ORIGIN || "*" }));
 app.use(express.json({ limit: "2mb" }));
 app.use("/uploads", express.static(uploadsDir));
 
@@ -482,6 +482,15 @@ app.put("/api/admin/settings", auth, async (req, res) => {
   res.json(settings);
 });
 
-app.listen(port, () => {
-  console.log(`Zyvora API listening on http://127.0.0.1:${port}`);
+// ── Serve frontend in production ──
+const distPath = path.join(__dirname, "..", "dist");
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+  app.get("*", (_req, res) => {
+    res.sendFile(path.join(distPath, "index.html"));
+  });
+}
+
+app.listen(port, "0.0.0.0", () => {
+  console.log(`Zyvora API listening on http://0.0.0.0:${port}`);
 });
