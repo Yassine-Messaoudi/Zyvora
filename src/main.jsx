@@ -1252,23 +1252,7 @@ function AdminContent({ section, data, headers, onChange }) {
     return <AdminCategories data={data} headers={headers} onChange={onChange} />;
   }
   if (section === "invoices") {
-    return (
-      <div className="admin-panel">
-        <h3 className="text-xl font-black text-white">Invoices</h3>
-        <div className="mt-5 grid gap-3">
-          {data.map((invoice) => (
-            <div className="table-row" key={invoice.id}>
-              <span>{invoice.id}</span>
-              <span>{invoice.customerEmail}</span>
-              <span>{invoice.status}</span>
-              <button className="small-btn" onClick={() => api(`/admin/invoices/${invoice.id}/mark-paid`, { method: "POST", body: "{}", headers })}>
-                Mark Paid
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
+    return <AdminInvoices data={data} headers={headers} onChange={onChange} />;
   }
   if (section === "orders") {
     return (
@@ -1292,6 +1276,68 @@ function AdminContent({ section, data, headers, onChange }) {
         <div className="mt-5 grid gap-3">
           {data.lowStock.length ? data.lowStock.map((product) => <div className="table-row" key={product.id}><span>{product.name}</span><span>{product.stockCount} left</span></div>) : <p className="text-slate-400">No low stock alerts.</p>}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminInvoices({ data, headers, onChange }) {
+  const [filter, setFilter] = useState("all");
+  const [message, setMessage] = useState("");
+  const filtered = filter === "all" ? data : data.filter((inv) => inv.status === filter);
+  const markPaid = async (id) => {
+    try {
+      await api(`/admin/invoices/${id}/mark-paid`, { method: "POST", body: "{}", headers });
+      setMessage(`Invoice ${id} marked as paid!`);
+      onChange();
+    } catch (err) { setMessage(err.message); }
+  };
+  const statusColor = (s) => s === "paid" ? "text-green-400" : s === "expired" ? "text-red-400" : "text-yellow-300";
+  return (
+    <div className="admin-panel">
+      <div className="admin-panel-head">
+        <div>
+          <h3>Invoices</h3>
+          <p>Track payments. Match the exact crypto amount to verify who paid.</p>
+        </div>
+      </div>
+      {message && <AdminNotice message={message} tone="success" />}
+      <div className="flex gap-2 flex-wrap mb-4">
+        {["all", "pending", "paid", "expired"].map((f) => (
+          <button key={f} className={`cat-pill ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>
+            {f === "all" ? `All (${data.length})` : `${f.charAt(0).toUpperCase() + f.slice(1)} (${data.filter((i) => i.status === f).length})`}
+          </button>
+        ))}
+      </div>
+      <div className="grid gap-3">
+        {filtered.length === 0 && <p className="text-slate-400">No invoices found.</p>}
+        {filtered.map((inv) => (
+          <div key={inv.id} className="rounded-xl border border-cyan-300/10 bg-[rgba(2,7,13,0.5)] p-4">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p className="font-mono text-sm text-cyan-200">{inv.id}</p>
+                <p className="text-sm text-slate-300 mt-1">{inv.customerEmail}{inv.discord ? ` | Discord: ${inv.discord}` : ""}</p>
+              </div>
+              <span className={`text-sm font-bold uppercase ${statusColor(inv.status)}`}>{inv.status}</span>
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 md:grid-cols-4 text-sm">
+              <div><span className="text-slate-400">Total: </span><span className="text-white font-bold">{money(inv.totalUsd)}</span></div>
+              <div><span className="text-slate-400">Coin: </span><span className="text-white">{inv.selectedCoin}</span></div>
+              {inv.expectedCryptoAmount && (
+                <div><span className="text-slate-400">Exact Amount: </span><span className="text-cyan-200 font-mono font-bold">{inv.expectedCryptoAmount} {inv.selectedCoin}</span></div>
+              )}
+              <div><span className="text-slate-400">Created: </span><span className="text-white">{new Date(inv.createdAt).toLocaleString()}</span></div>
+            </div>
+            {inv.depositAddress && (
+              <div className="mt-2 text-xs text-slate-400 truncate">Address: <span className="text-slate-300 font-mono">{inv.depositAddress}</span></div>
+            )}
+            {inv.status === "pending" && (
+              <button className="small-btn mt-3" onClick={() => markPaid(inv.id)}>
+                <CheckCircle2 className="h-3.5 w-3.5" /> Mark as Paid
+              </button>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );

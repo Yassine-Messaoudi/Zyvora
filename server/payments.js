@@ -11,10 +11,21 @@ export function supportedCoins() {
   return Object.entries(coinMeta).map(([symbol, meta]) => ({ symbol, ...meta }));
 }
 
-export function calculateCryptoAmount(totalUsd, coin) {
+export function calculateCryptoAmount(totalUsd, coin, existingAmounts = []) {
   const rate = coinMeta[coin]?.usdRate;
   if (!rate) throw new Error(`Unsupported coin: ${coin}`);
-  return Number((totalUsd / rate).toFixed(8));
+  const base = totalUsd / rate;
+  // Add a small random offset (0.000001 – 0.000999) to make the amount unique
+  // so the admin can match each blockchain tx to the correct invoice
+  const usedSet = new Set(existingAmounts.map(String));
+  let amount;
+  let attempts = 0;
+  do {
+    const offset = (Math.floor(Math.random() * 999) + 1) / 1_000_000;
+    amount = Number((base + offset).toFixed(8));
+    attempts++;
+  } while (usedSet.has(String(amount)) && attempts < 50);
+  return amount;
 }
 
 export function getWalletAddress(settings, coin) {

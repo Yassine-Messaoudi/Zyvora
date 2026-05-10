@@ -217,7 +217,12 @@ app.post("/api/invoices", checkoutLimiter, async (req, res) => {
     if (["LTC", "BTC", "SOL", "ETH"].includes(parsed.data.paymentMethod)) {
       const settings = await getSettings();
       depositAddress = getWalletAddress(settings, parsed.data.paymentMethod);
-      expectedCryptoAmount = calculateCryptoAmount(totalUsd, parsed.data.paymentMethod);
+      // Collect existing pending amounts for this coin to ensure uniqueness
+      const allInvoices = await getAllInvoices();
+      const existingAmounts = allInvoices
+        .filter((inv) => inv.selectedCoin === parsed.data.paymentMethod && inv.status === "pending")
+        .map((inv) => inv.expectedCryptoAmount);
+      expectedCryptoAmount = calculateCryptoAmount(totalUsd, parsed.data.paymentMethod, existingAmounts);
       const qr = await createQrData(parsed.data.paymentMethod, depositAddress, expectedCryptoAmount, id);
       qrCodeData = qr.data;
       qrCode = qr.qrCode;
