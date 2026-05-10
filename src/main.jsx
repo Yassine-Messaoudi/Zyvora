@@ -53,7 +53,6 @@ import {
   siSupercell,
   siValorant
 } from "simple-icons";
-import { jsPDF } from "jspdf";
 import "./styles.css";
 
 const API = "/api";
@@ -220,6 +219,105 @@ const browseCategories = [
   { name: "Other", category: "Other", icon: Boxes }
 ];
 
+const featuredFallbackProducts = [
+  {
+    id: "fallback-chatgpt-plus",
+    name: "ChatGPT Plus",
+    slug: "chatgpt-plus",
+    category: "Accounts",
+    price: 14.99,
+    stockCount: 24,
+    badge: "Popular",
+    rating: "4.9",
+    image: "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=900&q=80",
+    description: "Fresh digital access with protected delivery logs and dashboard history."
+  },
+  {
+    id: "fallback-chatgpt-accounts",
+    name: "ChatGPT Accounts",
+    slug: "chatgpt-accounts",
+    category: "Accounts",
+    price: 9.99,
+    stockCount: 38,
+    badge: "Hot",
+    rating: "4.8",
+    image: "https://images.unsplash.com/photo-1676299081847-824916de030a?auto=format&fit=crop&w=900&q=80",
+    description: "Verified account stock delivered after invoice confirmation."
+  },
+  {
+    id: "fallback-valorant",
+    name: "Valorant Accounts",
+    slug: "valorant-accounts",
+    category: "Games",
+    price: 29,
+    stockCount: 11,
+    badge: "New",
+    rating: "4.7",
+    image: "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=900&q=80",
+    description: "Rank-ready game accounts with clear replacement support."
+  },
+  {
+    id: "fallback-cs2",
+    name: "CS2 Prime Accounts",
+    slug: "cs2-prime-accounts",
+    category: "Games",
+    price: 18.5,
+    stockCount: 16,
+    badge: "Verified",
+    rating: "4.9",
+    image: "https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=900&q=80",
+    description: "Prime-ready access with instant order visibility."
+  },
+  {
+    id: "fallback-fortnite",
+    name: "Fortnite Account Gen",
+    slug: "fortnite-account-gen",
+    category: "Tools",
+    price: 24.99,
+    stockCount: 8,
+    badge: "Best Value",
+    rating: "4.8",
+    image: "https://images.unsplash.com/photo-1560253023-3ec5d502959f?auto=format&fit=crop&w=900&q=80",
+    description: "Private generator access delivered as a protected link."
+  },
+  {
+    id: "fallback-nordvpn",
+    name: "NordVPN Lifetime",
+    slug: "nordvpn-lifetime",
+    category: "VPN",
+    price: 12,
+    stockCount: 31,
+    badge: "Value",
+    rating: "4.6",
+    image: "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=900&q=80",
+    description: "VPN credentials with support notes attached to the order."
+  },
+  {
+    id: "fallback-spotify",
+    name: "Spotify Premium",
+    slug: "spotify-premium",
+    category: "Accounts",
+    price: 6.5,
+    stockCount: 57,
+    badge: "Fast",
+    rating: "4.7",
+    image: "https://images.unsplash.com/photo-1516280440614-37939bbacd81?auto=format&fit=crop&w=900&q=80",
+    description: "Premium access stock with quick checkout and delivery logs."
+  },
+  {
+    id: "fallback-netflix",
+    name: "Netflix Lifetime",
+    slug: "netflix-lifetime",
+    category: "Accounts",
+    price: 15,
+    stockCount: 19,
+    badge: "Limited",
+    rating: "4.8",
+    image: "https://images.unsplash.com/photo-1522869635100-9f4c5e86aa37?auto=format&fit=crop&w=900&q=80",
+    description: "Streaming access with replacement-aware order support."
+  }
+];
+
 function App() {
   const route = useRoute();
   return (
@@ -349,113 +447,167 @@ function HomePage() {
   const [reviews, setReviews] = useState([]);
   const cart = useCart();
   useEffect(() => {
-    Promise.all([api("/products?sort=popular"), api("/reviews")]).then(([prod, rev]) => {
-      setProducts(prod.slice(0, 4));
-      setReviews(rev);
-    });
+    Promise.all([api("/products?sort=popular"), api("/reviews")])
+      .then(([prod, rev]) => {
+        setProducts(Array.isArray(prod) ? prod.slice(0, 8) : []);
+        setReviews(Array.isArray(rev) ? rev : []);
+      })
+      .catch(() => {
+        setProducts([]);
+        setReviews([]);
+      });
   }, []);
+
+  const featuredProducts = products.length ? products : featuredFallbackProducts;
+
   return (
-    <>
-      <section className="hero-section">
-        <img className="hero-bg-art" src="/images/hero-reference-bg.png" alt="" aria-hidden="true" />
-        <div className="hero-particles" />
-        <div className="hero-shell">
-          <motion.div className="hero-copy" initial={{ opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55 }}>
-            <div className="eyebrow-badge">
-              <ShieldCheck className="h-4 w-4" /> Verified digital products
-            </div>
-            <h1>
-              Looking for premium digital products?
-              <span> We have got you covered.</span>
-            </h1>
-            <p className="hero-lede">
-              Instant crypto invoices, protected delivery logs, verified stock, and a customer dashboard for every key, file, credential, and private link.
-            </p>
-            <div className="hero-actions">
-              <a href="https://discord.gg/your-server" className="primary-btn">
-                <MessageCircle className="h-5 w-5" /> Join Discord
-              </a>
-              <Link href="/products" className="secondary-btn">
-                <Package className="h-5 w-5" /> Check Products
-              </Link>
-            </div>
-            <div className="hero-metrics">
-              <Metric value="4" label="crypto rails" />
-              <Metric value="15m" label="invoice windows" />
-              <Metric value="24/7" label="delivery logs" />
-            </div>
-          </motion.div>
-          <motion.div className="hero-visual" initial={{ opacity: 0, scale: 0.96, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 0.7 }}>
-            <div className="hero-orbit" />
-            <img className="hero-characters" src="/images/hero-reference-characters.png" alt="Gaming character squad" />
-            <div className="floating-stat bottom-10 right-4">
-              <Timer className="h-5 w-5 text-cyan-200" /> 15 min invoices
-            </div>
-          </motion.div>
-          <div className="hero-features">
-            <FeatureCard icon={ShieldCheck} title="Guaranteed Quality" text="Curated inventory with admin approval." />
-            <FeatureCard icon={Zap} title="Instant Delivery" text="Keys and files unlock after payment." />
-            <FeatureCard icon={Headphones} title="Live Support" text="Discord alerts and support routing." />
-          </div>
+    <main className="landing-page">
+      <HeroSection />
+      <StatsRow />
+      <TrustCards />
+      <CategoriesSection />
+      <section className="container-shell landing-section">
+        <SectionHeading eyebrow="Featured" title="Popular Drops" text="Verified digital stock with checkout-ready delivery paths and dashboard access." />
+        <div className="landing-product-grid mt-8">
+          {featuredProducts.map((product, index) => (
+            <ProductCard key={product.id || product.slug || product.name} product={product} index={index} onAdd={() => cart.add(product)} />
+          ))}
         </div>
       </section>
+      <ReviewsSection reviews={reviews} />
+      <FaqSection />
+    </main>
+  );
+}
 
-      <section className="section-band section-space">
-        <div className="container-shell">
-          <SectionHeading eyebrow="Browse" title="Product Categories" text="Filter into the exact digital stock your server, account, or game workflow needs." />
-          <div className="category-grid mt-8">
-            {browseCategories.map((item) => {
-              const Icon = item.icon || categoryIcons[item.category] || Boxes;
-              return (
-                <Link href={`/products?category=${encodeURIComponent(item.category)}`} key={item.name} className="category-card premium-hover">
+function HeroSection() {
+  return (
+    <section className="zy-hero">
+      <div className="hero-particles" />
+      <div className="zy-hero-shell">
+        <motion.div className="zy-hero-copy" initial={{ opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55 }}>
+          <div className="eyebrow-badge">
+            <ShieldCheck className="h-4 w-4" /> Verified digital products
+          </div>
+          <h1>
+            Premium digital products,
+            <span> delivered instantly.</span>
+          </h1>
+          <p className="hero-lede">
+            Crypto invoices, verified stock, secure delivery logs, and a dashboard for every account, key, file, and private link.
+          </p>
+          <div className="hero-actions">
+            <a href="https://discord.gg/your-server" className="primary-btn">
+              <MessageCircle className="h-5 w-5" /> Join Discord
+            </a>
+            <Link href="/products" className="secondary-btn">
+              <Package className="h-5 w-5" /> Browse Products
+            </Link>
+          </div>
+        </motion.div>
+
+        <motion.div className="zy-hero-visual" initial={{ opacity: 0, scale: 0.96, y: 18 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 0.7 }}>
+          <div className="zy-hero-card">
+            <div className="hero-orbit" />
+            <motion.img
+              className="zy-hero-img"
+              src="/images/hero-reference-characters.png"
+              alt="Cyber gaming marketplace characters"
+              animate={{ y: [0, -10, 0] }}
+              transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
+            />
+            <span className="zy-float-badge zy-float-top"><Wallet className="h-4 w-4" /> LTC • BTC • SOL • ETH</span>
+            <span className="zy-float-badge zy-float-left"><Zap className="h-4 w-4" /> Instant delivery</span>
+            <span className="zy-float-badge zy-float-bottom"><Timer className="h-4 w-4" /> 15 min invoices</span>
+          </div>
+        </motion.div>
+      </div>
+    </section>
+  );
+}
+
+function StatsRow() {
+  return (
+    <section className="container-shell stats-row">
+      <Metric value="4" label="Crypto rails" text="LTC, BTC, SOL, and ETH invoice flows." />
+      <Metric value="15m" label="Invoice windows" text="Clean countdowns with status tracking." />
+      <Metric value="24/7" label="Delivery logs" text="Keys, files, and private links stay visible." />
+    </section>
+  );
+}
+
+function TrustCards() {
+  const cards = [
+    { icon: ShieldCheck, title: "Guaranteed Quality", text: "Curated inventory with admin approval and stock controls." },
+    { icon: Zap, title: "Instant Delivery", text: "Eligible keys and files unlock after payment confirmation." },
+    { icon: Headphones, title: "Live Support", text: "Discord alerts and support routing keep orders moving." }
+  ];
+  return (
+    <section className="container-shell trust-section">
+      <div className="trust-grid">
+        {cards.map((card) => (
+          <FeatureCard key={card.title} {...card} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function CategoriesSection() {
+  return (
+    <section className="section-band landing-section">
+      <div className="container-shell">
+        <SectionHeading eyebrow="Browse" title="Product Categories" text="Find accounts, tools, games, methods, VPNs, scripts, maps, vehicles, and more." />
+        <div className="zy-category-grid mt-8">
+          {browseCategories.map((item) => {
+            const Icon = item.icon || categoryIcons[item.category] || Boxes;
+            return (
+              <motion.div key={item.name} whileHover={{ y: -6, scale: 1.01 }} transition={{ duration: 0.18 }}>
+                <Link href={`/products?category=${encodeURIComponent(item.category)}`} className="zy-category-card">
                   <span className={item.brand ? "category-logo brand-logo" : "category-logo"}>
                     {item.brand ? <BrandIcon icon={item.brand} /> : <Icon className="h-11 w-11" strokeWidth={2.15} />}
                   </span>
                   <span>{item.name}</span>
                 </Link>
-              );
-            })}
-          </div>
+              </motion.div>
+            );
+          })}
         </div>
-      </section>
+      </div>
+    </section>
+  );
+}
 
-      <section className="container-shell section-space">
-        <SectionHeading eyebrow="Featured" title="Popular Drops" text="Best-selling digital products with clean delivery paths and dashboard access." />
-        <div className="product-grid mt-8">
-          {products.map((product) => (
-            <ProductCard key={product.id} product={product} onAdd={() => cart.add(product)} />
-          ))}
-        </div>
-      </section>
-
-      <section id="reviews" className="section-band section-space">
-        <div className="container-shell">
-          <SectionHeading eyebrow="Trust" title="Purchase Reviews" text="Only approved purchase-based reviews appear here, keeping the store credible." />
-          {reviews.length ? (
-            <div className="mt-8 grid gap-5 md:grid-cols-3">
-              {reviews.slice(0, 3).map((review) => (
-                <div className="review-card premium-hover" key={review.id}>
-                  <Stars rating={review.rating} />
-                  <p className="mt-4 text-slate-200">{review.text}</p>
-                  <div className="mt-5 flex items-center justify-between gap-3">
-                    <p className="text-sm font-bold text-cyan-100">{review.name}</p>
-                    <span className="verified-pill">Verified purchase</span>
+function ReviewsSection({ reviews }) {
+  return (
+    <section id="reviews" className="section-band landing-section">
+      <div className="container-shell">
+        <SectionHeading eyebrow="Trust" title="Purchase Reviews" text="Only approved purchase-based reviews appear here, keeping the store credible." />
+        {reviews.length ? (
+          <div className="review-grid mt-8">
+            {reviews.slice(0, 3).map((review) => (
+              <motion.div className="review-card premium-hover" key={review.id} whileHover={{ y: -5 }}>
+                <Stars rating={review.rating} />
+                <p className="mt-4 text-slate-200">{review.text}</p>
+                <div className="mt-5 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-bold text-cyan-100">{review.name || "Verified customer"}</p>
+                    {review.productName && <p className="mt-1 text-xs text-slate-500">{review.productName}</p>}
                   </div>
+                  <span className="verified-pill">Verified purchase</span>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="empty-state review-empty mt-8">
-              <div className="empty-icon"><Star className="h-7 w-7" /></div>
-              <h3>No public reviews yet</h3>
-              <p>Verified review cards appear here after approved customer purchases.</p>
-            </div>
-          )}
-        </div>
-      </section>
-
-      <FaqSection />
-    </>
+              </motion.div>
+            ))}
+          </div>
+        ) : (
+          <div className="review-empty-state mt-8">
+            <div className="empty-icon"><Star className="h-7 w-7" /></div>
+            <h3>No public reviews yet</h3>
+            <p>Verified purchase reviews will appear here after approval.</p>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -477,11 +629,12 @@ function BrandIcon({ icon }) {
   );
 }
 
-function Metric({ value, label }) {
+function Metric({ value, label, text }) {
   return (
     <div className="metric-card">
       <strong>{value}</strong>
       <span>{label}</span>
+      {text && <p>{text}</p>}
     </div>
   );
 }
@@ -500,19 +653,34 @@ function SectionHeading({ eyebrow, title, text }) {
 
 function ProductCard({ product, onAdd }) {
   const inStock = product.stockCount > 0;
+  const safeSlug = product.slug || encodeURIComponent(product.name || "product");
   return (
-    <motion.article className="product-card premium-hover" whileHover={{ y: -7 }} transition={{ duration: 0.18 }}>
-      <Link href={`/products/${product.slug}`} className="block">
+    <motion.article className="product-card landing-product-card premium-hover" whileHover={{ y: -7 }} transition={{ duration: 0.18 }}>
+      <Link href={`/products/${safeSlug}`} className="block">
         <div className="product-image">
           {product.image ? <img src={product.image} alt={product.name} /> : <div className="product-image-placeholder"><Package className="h-10 w-10 text-slate-600" /></div>}
-          {product.badge && <span>{product.badge}</span>}
+          <div className="product-image-overlay">
+            <span>{product.badge || "Verified"}</span>
+            <span className={`stock-badge ${inStock ? "in" : "out"}`}>{inStock ? "In stock" : "Sold out"}</span>
+          </div>
         </div>
       </Link>
       <div className="product-content">
+        <div className="product-meta-line">
+          <span className="product-category">{product.category || "Digital"}</span>
+          <Stars rating={product.rating || "4.8"} compact />
+        </div>
         <h3>{product.name}</h3>
+        <p>{product.description || "Verified digital product with protected checkout and dashboard delivery."}</p>
         <div className="product-buy-row">
           <strong className="text-cyan-200"><Money value={product.price} /></strong>
-          <span className={`stock-badge ${inStock ? "in" : "out"}`}>{inStock ? `${product.stockCount} in stock` : "Out of stock"}</span>
+          <span className="stock-count">{inStock ? `${product.stockCount} left` : "Restocking"}</span>
+        </div>
+        <div className="product-actions">
+          <Link href={`/products/${safeSlug}`} className="small-btn">View Product</Link>
+          <button className="small-btn accent" onClick={onAdd} disabled={!inStock}>
+            <ShoppingCart className="h-4 w-4" /> Add
+          </button>
         </div>
       </div>
     </motion.article>
@@ -980,7 +1148,8 @@ function CheckoutPage() {
   );
 }
 
-function downloadInvoicePdf(invoice) {
+async function downloadInvoicePdf(invoice) {
+  const { jsPDF } = await import("jspdf");
   const doc = new jsPDF();
   const w = doc.internal.pageSize.getWidth();
   let y = 20;
@@ -1260,10 +1429,10 @@ function DashboardPage() {
           </aside>
           <div className="grid gap-6">
             <DashboardBlock title="Orders" icon={Package}>
-              {data.orders.length ? data.orders.map((order) => <OrderCard order={order} key={order.id} />) : <p className="text-slate-400">No completed orders found.</p>}
+              {(data.orders || []).length ? (data.orders || []).map((order) => <OrderCard order={order} key={order.id} />) : <p className="text-slate-400">No completed orders found.</p>}
             </DashboardBlock>
             <DashboardBlock title="Invoices" icon={Wallet}>
-              {data.invoices.map((invoice) => (
+              {(data.invoices || []).map((invoice) => (
                 <div className="table-row" key={invoice.id}>
                   <span>{invoice.id}</span>
                   <span>{invoice.status}</span>
@@ -1313,6 +1482,28 @@ function OrderCard({ order }) {
   );
 }
 
+const adminNavItems = [
+  ["overview", "Overview", LayoutDashboard],
+  ["products", "Products", Package],
+  ["categories", "Categories", Boxes],
+  ["orders", "Orders", ShoppingCart],
+  ["invoices", "Invoices", Wallet],
+  ["customers", "Customers", UserCircle],
+  ["coupons", "Coupons", BadgeDollarSign],
+  ["reviews", "Reviews", Star],
+  ["settings", "Settings", Settings]
+];
+
+const mockAdminOrders = [
+  { id: "ORD-2401", customerEmail: "buyer@zyvora.local", product: "ChatGPT Plus", totalUsd: 14.99, paymentMethod: "LTC", status: "paid", deliveryStatus: "delivered", createdAt: new Date().toISOString() },
+  { id: "ORD-2402", customerEmail: "owner@zyvora.local", product: "FiveM Core Pack", totalUsd: 49.99, paymentMethod: "BTC", status: "pending", deliveryStatus: "queued", createdAt: new Date(Date.now() - 86400000).toISOString() }
+];
+
+const mockAdminInvoices = [
+  { id: "INV-LTC-8F31", customerEmail: "buyer@zyvora.local", selectedCoin: "LTC", expectedCryptoAmount: "0.14250000", paidAmount: "0.14250000", depositAddress: "ltc1qexampleinvoiceaddress", confirmations: 6, status: "paid", expiresAt: new Date(Date.now() + 900000).toISOString(), txid: "ltc_tx_example" },
+  { id: "INV-SOL-2C90", customerEmail: "new@zyvora.local", selectedCoin: "SOL", expectedCryptoAmount: "0.620000", paidAmount: "0", depositAddress: "SoLExampleDepositAddress", confirmations: 0, status: "pending", expiresAt: new Date(Date.now() + 600000).toISOString(), txid: "" }
+];
+
 function AdminPage({ section }) {
   const [token, setToken] = useState(localStorage.getItem(ADMIN_TOKEN_KEY) || "");
   const [login, setLogin] = useState({ email: "crownshoptn@gmail.com", password: "" });
@@ -1348,10 +1539,12 @@ function AdminPage({ section }) {
   }, [section, token, reloadKey]);
   if (!token) {
     return (
-      <section className="mx-auto max-w-md px-4 py-16">
-        <div className="admin-panel">
-          <Lock className="h-8 w-8 text-cyan-200" />
-          <h1 className="mt-4 text-3xl font-black text-white">Admin Login</h1>
+      <section className="admin-login-screen">
+        <div className="admin-login-card">
+          <span className="admin-login-icon"><Lock className="h-6 w-6" /></span>
+          <p className="admin-kicker">Secure admin access</p>
+          <h1>ZYVORA Control Center</h1>
+          <p>Sign in to manage products, invoices, orders, delivery stock, and payment settings.</p>
           <form className="mt-6 grid gap-4" onSubmit={signIn}>
             <label className="field">
               <span>Email</span>
@@ -1369,34 +1562,16 @@ function AdminPage({ section }) {
     );
   }
   return (
-    <section className="mx-auto max-w-7xl px-4 py-12">
-      <SectionHeading eyebrow="Admin" title="Operations Center" />
-      <div className="mt-8 grid gap-6 lg:grid-cols-[240px_1fr]">
-        <aside className="admin-nav">
-          {[
-            ["overview", LayoutDashboard],
-            ["products", Package],
-            ["categories", Boxes],
-            ["orders", ShoppingCart],
-            ["invoices", Wallet],
-            ["settings", Settings]
-          ].map(([name, Icon]) => (
-            <Link key={name} href={name === "overview" ? "/admin" : `/admin/${name}`} className={section === name ? "active" : ""}>
-              <Icon className="h-4 w-4" /> {name}
-            </Link>
-          ))}
-          <button
-            onClick={() => {
-              localStorage.removeItem(ADMIN_TOKEN_KEY);
-              setToken("");
-            }}
-          >
-            Sign out
-          </button>
-        </aside>
-        <AdminContent section={section} data={data} headers={headers} onChange={() => setReloadKey((value) => value + 1)} />
-      </div>
-    </section>
+    <AdminLayout
+      section={section}
+      onSignOut={() => {
+        localStorage.removeItem(ADMIN_TOKEN_KEY);
+        setToken("");
+      }}
+    >
+      {error && <AdminNotice message={error} tone="error" />}
+      <AdminContent section={section} data={data} headers={headers} onChange={() => setReloadKey((value) => value + 1)} />
+    </AdminLayout>
   );
 }
 
@@ -1404,11 +1579,18 @@ const defaultProductForm = {
   name: "",
   category: "",
   price: "0",
+  currency: "USD",
   image: "",
   badge: "New",
+  status: "active",
+  deliveryType: "license key",
   stockCount: "0",
   shortDescription: "",
-  description: ""
+  description: "",
+  features: "",
+  slug: "",
+  metaTitle: "",
+  metaDescription: ""
 };
 
 function listToText(value) {
@@ -1420,11 +1602,18 @@ function productToForm(product) {
     name: product.name || "",
     category: product.category || "",
     price: String(product.price ?? 0),
+    currency: product.currency || "USD",
     image: product.image || "",
     badge: product.badge || "New",
+    status: product.status || "active",
+    deliveryType: product.deliveryType || "license key",
     stockCount: String(product.stockCount ?? 0),
     shortDescription: product.shortDescription || "",
-    description: product.description || ""
+    description: product.description || "",
+    features: listToText(product.features),
+    slug: product.slug || "",
+    metaTitle: product.metaTitle || "",
+    metaDescription: product.metaDescription || ""
   };
 }
 
@@ -1436,8 +1625,135 @@ function formPayload(form) {
   };
 }
 
+function AdminLayout({ section, children, onSignOut }) {
+  const [drawer, setDrawer] = useState(false);
+  return (
+    <section className="admin-shell">
+      <div className="admin-mobile-bar">
+        <button className="small-btn" onClick={() => setDrawer(true)}><Menu className="h-4 w-4" /> Menu</button>
+        <span>Admin / {adminLabel(section)}</span>
+      </div>
+      <aside className={`admin-sidebar ${drawer ? "open" : ""}`}>
+        <div className="admin-sidebar-head">
+          <Link href="/" className="brand-lockup">
+            <span className="brand-mark"><img src="/images/zyvola-logo.png" alt="ZYVORA logo" /></span>
+            <span><span className="brand-name">ZYVORA</span><span className="brand-subtitle">Digital Market</span></span>
+          </Link>
+          <button className="icon-btn lg:hidden" onClick={() => setDrawer(false)}><X className="h-4 w-4" /></button>
+        </div>
+        <nav className="admin-nav">
+          {adminNavItems.map(([name, label, Icon]) => (
+            <Link key={name} href={name === "overview" ? "/admin" : `/admin/${name}`} className={section === name ? "active" : ""}>
+              <Icon className="h-4 w-4" /> <span>{label}</span>
+            </Link>
+          ))}
+        </nav>
+        <button className="admin-signout" onClick={onSignOut}><Lock className="h-4 w-4" /> Sign out</button>
+      </aside>
+      {drawer && <button className="admin-drawer-backdrop" onClick={() => setDrawer(false)} aria-label="Close admin menu" />}
+      <main className="admin-main">
+        <div className="admin-topbar">
+          <div>
+            <p>Admin / {adminLabel(section)}</p>
+            <strong>Marketplace control center</strong>
+          </div>
+          <div className="admin-top-actions">
+            <CurrencySelector />
+            <Link href="/dashboard" className="small-btn">Dashboard</Link>
+            <span className="admin-profile"><UserCircle className="h-4 w-4" /> Admin</span>
+          </div>
+        </div>
+        {children}
+      </main>
+    </section>
+  );
+}
+
+function adminLabel(section) {
+  return adminNavItems.find(([name]) => name === section)?.[1] || "Overview";
+}
+
+function AdminPageHeader({ section, title, subtitle, action }) {
+  return (
+    <div className="admin-page-header">
+      <div>
+        <p className="admin-kicker">Admin / {adminLabel(section)}</p>
+        <h1>{title}</h1>
+        <span>{subtitle}</span>
+      </div>
+      {action && <div className="admin-header-action">{action}</div>}
+    </div>
+  );
+}
+
+function AdminPanel({ title, text, icon: Icon, children, action }) {
+  return (
+    <section className="admin-panel admin-panel-pro">
+      <div className="admin-panel-head">
+        <div>
+          {title && <h3>{Icon && <Icon className="h-5 w-5" />} {title}</h3>}
+          {text && <p>{text}</p>}
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function AdminStatCard({ icon: Icon, label, value, text, tone = "" }) {
+  return (
+    <motion.div className={`admin-stat ${tone}`} whileHover={{ y: -4 }} transition={{ duration: 0.16 }}>
+      <span><Icon className="h-5 w-5" /></span>
+      <div>
+        <strong>{value}</strong>
+        <p>{label}</p>
+        <small>{text}</small>
+      </div>
+    </motion.div>
+  );
+}
+
+function AdminEmptyState({ icon: Icon = Package, title, text, action }) {
+  return (
+    <div className="admin-empty-state">
+      <span><Icon className="h-7 w-7" /></span>
+      <h3>{title}</h3>
+      <p>{text}</p>
+      {action}
+    </div>
+  );
+}
+
+function StatusBadge({ status = "pending" }) {
+  const normalized = String(status || "pending").toLowerCase();
+  return <span className={`admin-status ${normalized}`}>{normalized}</span>;
+}
+
+function formatAdminDate(value) {
+  if (!value) return "Not recorded";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Not recorded" : date.toLocaleString();
+}
+
+function clip(value, length = 18) {
+  const text = String(value || "");
+  return text.length > length ? `${text.slice(0, length)}...` : text || "Not set";
+}
+
+function AdminLoadingSkeleton() {
+  return (
+    <div className="admin-content-stack">
+      <div className="admin-skeleton hero" />
+      <div className="admin-stat-grid">
+        {Array.from({ length: 6 }).map((_, index) => <div className="admin-skeleton" key={index} />)}
+      </div>
+    </div>
+  );
+}
+
 function AdminContent({ section, data, headers, onChange }) {
-  if (!data) return <Loading />;
+  if (!data) return <AdminLoadingSkeleton />;
   if (section === "products") {
     return <AdminProducts data={data} headers={headers} onChange={onChange} />;
   }
@@ -1448,36 +1764,125 @@ function AdminContent({ section, data, headers, onChange }) {
     return <AdminInvoices data={data} headers={headers} onChange={onChange} />;
   }
   if (section === "orders") {
-    return (
-      <div className="admin-panel">
-        <h3 className="text-xl font-black text-white">Orders</h3>
-        <div className="mt-5 grid gap-4">{data.map((order) => <OrderCard order={order} key={order.id} />)}</div>
-      </div>
-    );
+    return <AdminOrders data={data} />;
   }
   if (section === "settings") {
     return <AdminSettings data={data} headers={headers} onChange={onChange} />;
   }
+  if (["customers", "coupons", "reviews"].includes(section)) {
+    return <AdminPlaceholder section={section} />;
+  }
+  const lowStock = data.lowStock || [];
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-      <DataTile label="Revenue" value={money(data.revenue)} />
-      <DataTile label="Products" value={data.products} />
-      <DataTile label="Invoices" value={data.invoices} />
-      <DataTile label="Customers" value={data.customers} />
-      <div className="admin-panel md:col-span-2 xl:col-span-4">
-        <h3 className="text-xl font-black text-white">Low Stock</h3>
-        <div className="mt-5 grid gap-3">
-          {data.lowStock.length ? data.lowStock.map((product) => <div className="table-row" key={product.id}><span>{product.name}</span><span>{product.stockCount} left</span></div>) : <p className="text-slate-400">No low stock alerts.</p>}
-        </div>
+    <div className="admin-content-stack">
+      <AdminPageHeader section="overview" title="Operations Center" subtitle="Manage products, invoices, orders, delivery logs, and payment settings." />
+      <div className="admin-stat-grid">
+        <AdminStatCard icon={BadgeDollarSign} label="Total Revenue" value={money(data.revenue || 0)} text="Confirmed sales value" />
+        <AdminStatCard icon={ShoppingCart} label="Orders" value={data.orders || 0} text="Purchase records" />
+        <AdminStatCard icon={Wallet} label="Pending Invoices" value={data.invoices || 0} text="Payment activity" />
+        <AdminStatCard icon={Package} label="Products" value={data.products || 0} text="Published catalog" />
+        <AdminStatCard icon={Boxes} label="Stock Items" value={lowStock.reduce((sum, p) => sum + Number(p.stockCount || 0), 0)} text="Low-stock total" />
+        <AdminStatCard icon={Star} label="Reviews" value={data.reviews || 0} text="Approved feedback" />
+      </div>
+      <div className="admin-overview-grid">
+        <AdminPanel title="Recent Orders" text="Latest customer purchases and delivery activity." icon={ShoppingCart}>
+          <AdminMiniRows rows={mockAdminOrders.map((order) => [order.id, order.customerEmail, money(order.totalUsd), order.status])} empty="No orders yet." />
+        </AdminPanel>
+        <AdminPanel title="Recent Invoices" text="Crypto invoice states and confirmation progress." icon={Wallet}>
+          <AdminMiniRows rows={mockAdminInvoices.map((invoice) => [invoice.id, invoice.selectedCoin, invoice.expectedCryptoAmount, invoice.status])} empty="No invoices yet." />
+        </AdminPanel>
+        <AdminPanel title="Low Stock Products" text="Products that need fresh keys, accounts, or files." icon={AlertTriangle}>
+          {lowStock.length ? (
+            <div className="admin-mini-list">
+              {lowStock.map((product) => (
+                <div className="admin-mini-row" key={product.id}>
+                  <span>{product.name}</span>
+                  <strong>{product.stockCount} left</strong>
+                </div>
+              ))}
+            </div>
+          ) : <AdminEmptyState icon={ShieldCheck} title="Stock looks healthy" text="Low-stock alerts will appear here." />}
+        </AdminPanel>
+        <AdminPanel title="Quick Actions" text="Jump straight into the store controls." icon={Zap}>
+          <div className="admin-quick-actions">
+            <Link href="/admin/products" className="primary-btn"><Plus className="h-4 w-4" /> Add Product</Link>
+            <Link href="/admin/categories" className="secondary-btn"><Boxes className="h-4 w-4" /> Create Category</Link>
+            <Link href="/admin/orders" className="secondary-btn"><ShoppingCart className="h-4 w-4" /> View Orders</Link>
+            <Link href="/admin/settings" className="secondary-btn"><Settings className="h-4 w-4" /> Payment Settings</Link>
+          </div>
+        </AdminPanel>
       </div>
     </div>
   );
 }
 
+function AdminMiniRows({ rows, empty }) {
+  if (!rows.length) return <p className="text-slate-400">{empty}</p>;
+  return (
+    <div className="admin-mini-list">
+      {rows.slice(0, 4).map((row, index) => (
+        <div className="admin-mini-row" key={index}>
+          {row.map((cell, cellIndex) => cellIndex === row.length - 1 ? <StatusBadge key={cellIndex} status={cell} /> : <span key={cellIndex}>{cell}</span>)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AdminOrders({ data }) {
+  const orders = Array.isArray(data) && data.length ? data : mockAdminOrders;
+  const stats = [
+    ["Total Orders", orders.length, ShoppingCart],
+    ["Paid Orders", orders.filter((o) => o.status === "paid").length, CheckCircle2],
+    ["Pending Orders", orders.filter((o) => o.status === "pending").length, Timer],
+    ["Failed Orders", orders.filter((o) => ["failed", "refunded"].includes(o.status)).length, AlertTriangle]
+  ];
+  return (
+    <div className="admin-content-stack">
+      <AdminPageHeader section="orders" title="Orders" subtitle="Track purchases, delivery status, and customer activity." />
+      <div className="admin-stat-grid compact">
+        {stats.map(([label, value, Icon]) => <AdminStatCard key={label} icon={Icon} label={label} value={value} text="Order state" />)}
+      </div>
+      <AdminPanel title="Order Ledger" text="Every completed checkout should create a delivery-aware order record." icon={ShoppingCart}>
+        <div className="admin-table order-table">
+          <div className="admin-table-head"><span>Order ID</span><span>Customer Email</span><span>Product</span><span>Total</span><span>Payment</span><span>Status</span><span>Delivery</span><span>Created</span><span>Actions</span></div>
+          {orders.map((order) => (
+            <div className="admin-table-row" key={order.id}>
+              <strong>{order.id}</strong>
+              <span>{order.customerEmail || order.email || "Unknown"}</span>
+              <span>{order.product || order.products?.join(", ") || order.deliveryItems?.[0]?.name || "Digital product"}</span>
+              <strong>{money(order.totalUsd || order.total || 0)}</strong>
+              <span>{order.paymentMethod || order.selectedCoin || "Balance"}</span>
+              <StatusBadge status={order.status || "pending"} />
+              <StatusBadge status={order.deliveryStatus || (order.status === "paid" ? "delivered" : "queued")} />
+              <span>{formatAdminDate(order.createdAt)}</span>
+              <div className="admin-row-actions"><button className="small-btn">View</button><button className="small-btn">Resend</button><button className="small-btn">Mark delivered</button></div>
+            </div>
+          ))}
+          {!orders.length && <AdminEmptyState icon={ShoppingCart} title="No orders yet" text="Orders will appear here when customers complete checkout." />}
+        </div>
+      </AdminPanel>
+    </div>
+  );
+}
+
+function AdminPlaceholder({ section }) {
+  const title = adminLabel(section);
+  return (
+    <div className="admin-content-stack">
+      <AdminPageHeader section={section} title={title} subtitle={`${title} controls are ready for backend wiring.`} />
+      <AdminPanel title={`${title} Manager`} text="This section is styled and reserved for the next backend endpoints." icon={Settings}>
+        <AdminEmptyState icon={Settings} title={`${title} module ready`} text="Connect the API and this area can show tables, filters, and actions without redesigning the layout." />
+      </AdminPanel>
+    </div>
+  );
+}
+
 function AdminInvoices({ data, headers, onChange }) {
+  const source = Array.isArray(data) && data.length ? data : mockAdminInvoices;
   const [filter, setFilter] = useState("all");
   const [message, setMessage] = useState("");
-  const filtered = filter === "all" ? data : data.filter((inv) => inv.status === filter);
+  const filtered = filter === "all" ? source : source.filter((inv) => inv.status === filter);
   const markPaid = async (id) => {
     try {
       await api(`/admin/invoices/${id}/mark-paid`, { method: "POST", body: "{}", headers });
@@ -1485,60 +1890,56 @@ function AdminInvoices({ data, headers, onChange }) {
       onChange();
     } catch (err) { setMessage(err.message); }
   };
-  const statusColor = (s) => s === "paid" ? "text-green-400" : s === "expired" ? "text-red-400" : "text-yellow-300";
+  const counts = ["pending", "detected", "confirming", "paid", "expired", "underpaid"].map((status) => [status, source.filter((inv) => inv.status === status).length]);
   return (
-    <div className="admin-panel">
-      <div className="admin-panel-head">
-        <div>
-          <h3>Invoices</h3>
-          <p>Track payments. Match the exact crypto amount to verify who paid.</p>
-        </div>
+    <div className="admin-content-stack">
+      <AdminPageHeader section="invoices" title="Invoices" subtitle="Monitor crypto invoices, payment confirmations, and delivery triggers." />
+      <div className="admin-stat-grid compact">
+        {counts.map(([status, count]) => <AdminStatCard key={status} icon={Wallet} label={status} value={count} text="Invoice state" tone={status} />)}
       </div>
       {message && <AdminNotice message={message} tone="success" />}
-      <div className="flex gap-2 flex-wrap mb-4">
-        {["all", "pending", "paid", "expired"].map((f) => (
-          <button key={f} className={`cat-pill ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>
-            {f === "all" ? `All (${data.length})` : `${f.charAt(0).toUpperCase() + f.slice(1)} (${data.filter((i) => i.status === f).length})`}
-          </button>
-        ))}
-      </div>
-      <div className="grid gap-3">
-        {filtered.length === 0 && <p className="text-slate-400">No invoices found.</p>}
-        {filtered.map((inv) => (
-          <div key={inv.id} className="rounded-xl border border-cyan-300/10 bg-[rgba(2,7,13,0.5)] p-4">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <p className="font-mono text-sm text-cyan-200">{inv.id}</p>
-                <p className="text-sm text-slate-300 mt-1">{inv.customerEmail}{inv.discord ? ` | Discord: ${inv.discord}` : ""}</p>
-              </div>
-              <span className={`text-sm font-bold uppercase ${statusColor(inv.status)}`}>{inv.status}</span>
-            </div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 md:grid-cols-4 text-sm">
-              <div><span className="text-slate-400">Total: </span><span className="text-white font-bold">{money(inv.totalUsd)}</span></div>
-              <div><span className="text-slate-400">Coin: </span><span className="text-white">{inv.selectedCoin}</span></div>
-              {inv.expectedCryptoAmount && (
-                <div><span className="text-slate-400">Exact Amount: </span><span className="text-cyan-200 font-mono font-bold">{inv.expectedCryptoAmount} {inv.selectedCoin}</span></div>
-              )}
-              <div><span className="text-slate-400">Created: </span><span className="text-white">{new Date(inv.createdAt).toLocaleString()}</span></div>
-            </div>
-            {inv.depositAddress && (
-              <div className="mt-2 text-xs text-slate-400 truncate">Address: <span className="text-slate-300 font-mono">{inv.depositAddress}</span></div>
-            )}
-            {inv.status === "pending" && (
-              <button className="small-btn mt-3" onClick={() => markPaid(inv.id)}>
-                <CheckCircle2 className="h-3.5 w-3.5" /> Mark as Paid
-              </button>
-            )}
+      <AdminPanel title="Invoice Ledger" text="Blockchain addresses are matched to invoices server-side." icon={Wallet} action={
+        <div className="admin-filter-tabs">
+          {["all", "pending", "detected", "confirming", "paid", "expired", "underpaid"].map((f) => <button key={f} className={filter === f ? "active" : ""} onClick={() => setFilter(f)}>{f}</button>)}
+        </div>
+      }>
+        <div className="admin-table invoice-table">
+          <div className="admin-table-head">
+            <span>Invoice ID</span><span>Customer</span><span>Coin</span><span>Expected</span><span>Paid</span><span>Address</span><span>Conf.</span><span>Status</span><span>Expires</span><span>TXID</span><span>Actions</span>
           </div>
-        ))}
-      </div>
+          {filtered.map((inv) => (
+            <div className="admin-table-row" key={inv.id}>
+              <strong>{inv.id}</strong>
+              <span>{inv.customerEmail || inv.customer || "Unknown"}</span>
+              <span>{inv.selectedCoin || inv.coin || "LTC"}</span>
+              <span>{inv.expectedCryptoAmount || inv.expectedAmount || "0.00000000"}</span>
+              <span>{inv.paidAmount || "0"}</span>
+              <code>{clip(inv.depositAddress || inv.address, 16)}</code>
+              <span>{inv.confirmations ?? inv.confirmationCount ?? 0}</span>
+              <StatusBadge status={inv.status} />
+              <span>{formatAdminDate(inv.expiresAt || inv.expirationDate)}</span>
+              <code>{clip(inv.txid || inv.transactionId, 12)}</code>
+              <div className="admin-row-actions">
+                <button className="small-btn">View</button>
+                <button className="small-btn" onClick={() => navigator.clipboard?.writeText(inv.depositAddress || inv.address || "")}><Copy className="h-3.5 w-3.5" /></button>
+                <button className="small-btn" onClick={() => markPaid(inv.id)}>Mark paid</button>
+              </div>
+            </div>
+          ))}
+          {!filtered.length && <AdminEmptyState icon={Wallet} title="No invoices found" text="Crypto invoices will appear here after checkout starts." />}
+        </div>
+      </AdminPanel>
     </div>
   );
 }
 
 function AdminSettings({ data, headers, onChange }) {
+  const [tab, setTab] = useState("General");
   const [form, setForm] = useState({
     storeName: data.storeName || "Zyvora Market",
+    domain: data.domain || "zyvory.xyz",
+    defaultCurrency: data.defaultCurrency || "EUR",
+    timezone: data.timezone || "Africa/Lagos",
     discordInvite: data.discordInvite || "",
     ltcAddress: (data.walletAddresses || {}).LTC || "",
     btcAddress: (data.walletAddresses || {}).BTC || "",
@@ -1569,38 +1970,59 @@ function AdminSettings({ data, headers, onChange }) {
       onChange();
     } catch (err) { setError(err.message); }
   };
+  const tabs = ["General", "Payments", "Crypto Wallets", "Discord Webhooks", "Email SMTP", "Security", "Branding"];
   return (
-    <div className="admin-panel">
-      <div className="admin-panel-head">
-        <div>
-          <h3>Store Settings</h3>
-          <p>Configure your store name, Discord link, and crypto wallet addresses.</p>
-        </div>
-      </div>
+    <div className="admin-content-stack">
+      <AdminPageHeader section="settings" title="Settings" subtitle="Configure storefront, payments, wallets, Discord, email, security, and branding." />
       {(message || error) && <AdminNotice message={message || error} tone={error ? "error" : "success"} />}
-      <form className="admin-form" onSubmit={save}>
-        <AdminField label="Store Name">
-          <input value={form.storeName} onChange={(e) => setForm({ ...form, storeName: e.target.value })} placeholder="Zyvora Market" />
-        </AdminField>
-        <AdminField label="Discord Invite Link">
-          <input value={form.discordInvite} onChange={(e) => setForm({ ...form, discordInvite: e.target.value })} placeholder="https://discord.gg/your-server" />
-        </AdminField>
-        <AdminField label="Litecoin (LTC) Address" wide>
-          <input value={form.ltcAddress} onChange={(e) => setForm({ ...form, ltcAddress: e.target.value })} placeholder="Your LTC wallet address" />
-        </AdminField>
-        <AdminField label="Bitcoin (BTC) Address" wide>
-          <input value={form.btcAddress} onChange={(e) => setForm({ ...form, btcAddress: e.target.value })} placeholder="Your BTC wallet address" />
-        </AdminField>
-        <AdminField label="Solana (SOL) Address" wide>
-          <input value={form.solAddress} onChange={(e) => setForm({ ...form, solAddress: e.target.value })} placeholder="Your SOL wallet address" />
-        </AdminField>
-        <AdminField label="Ethereum (ETH) Address" wide>
-          <input value={form.ethAddress} onChange={(e) => setForm({ ...form, ethAddress: e.target.value })} placeholder="Your ETH wallet address" />
-        </AdminField>
-        <div className="admin-form-actions">
-          <button className="primary-btn">Save Settings</button>
-        </div>
-      </form>
+      <AdminPanel title="Store Settings" text="Sensitive secrets belong on the server only. Keep wallet/API credentials out of frontend code." icon={Settings}>
+        <div className="settings-tabs">{tabs.map((item) => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{item}</button>)}</div>
+        <form className="admin-form settings-form" onSubmit={save}>
+          {tab === "General" && <>
+            <AdminField label="Store name" help="Displayed in checkout, dashboard, and emails."><input value={form.storeName} onChange={(e) => setForm({ ...form, storeName: e.target.value })} /></AdminField>
+            <AdminField label="Domain"><input value={form.domain} onChange={(e) => setForm({ ...form, domain: e.target.value })} /></AdminField>
+            <AdminField label="Support Discord URL"><input value={form.discordInvite} onChange={(e) => setForm({ ...form, discordInvite: e.target.value })} /></AdminField>
+            <AdminField label="Default currency"><select value={form.defaultCurrency} onChange={(e) => setForm({ ...form, defaultCurrency: e.target.value })}>{CURRENCIES.map((c) => <option key={c.code}>{c.code}</option>)}</select></AdminField>
+            <AdminField label="Timezone"><input value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })} /></AdminField>
+          </>}
+          {tab === "Payments" && <>
+            {["LTC", "BTC", "SOL", "ETH"].map((coin) => <label className="admin-toggle" key={coin}><span>{coin}</span><input type="checkbox" defaultChecked /></label>)}
+            <AdminField label="Invoice expiration minutes"><input type="number" defaultValue="15" /></AdminField>
+            <AdminField label="Confirmation requirements"><input defaultValue="LTC: 2, BTC: 1, SOL: 1, ETH: 12" /></AdminField>
+            <AdminField label="Minimum payment amount"><input type="number" defaultValue="1" /></AdminField>
+          </>}
+          {tab === "Crypto Wallets" && <>
+            <AdminField label="Litecoin (LTC) Address" wide><input value={form.ltcAddress} onChange={(e) => setForm({ ...form, ltcAddress: e.target.value })} /></AdminField>
+            <AdminField label="Bitcoin (BTC) Address" wide><input value={form.btcAddress} onChange={(e) => setForm({ ...form, btcAddress: e.target.value })} /></AdminField>
+            <AdminField label="Solana (SOL) Address" wide><input value={form.solAddress} onChange={(e) => setForm({ ...form, solAddress: e.target.value })} /></AdminField>
+            <AdminField label="Ethereum (ETH) Address" wide><input value={form.ethAddress} onChange={(e) => setForm({ ...form, ethAddress: e.target.value })} /></AdminField>
+          </>}
+          {tab === "Discord Webhooks" && <>
+            <AdminField label="New order webhook" wide><input placeholder="https://discord.com/api/webhooks/..." /></AdminField>
+            <AdminField label="Invoice paid webhook" wide><input placeholder="https://discord.com/api/webhooks/..." /></AdminField>
+            <AdminField label="Low stock webhook" wide><input placeholder="https://discord.com/api/webhooks/..." /></AdminField>
+            <button type="button" className="secondary-btn"><MessageCircle className="h-4 w-4" /> Test webhook</button>
+          </>}
+          {tab === "Email SMTP" && <>
+            <AdminField label="SMTP host"><input placeholder="smtp.mailgun.org" /></AdminField>
+            <AdminField label="From email"><input placeholder="support@zyvory.xyz" /></AdminField>
+            <AdminField label="SMTP password" wide><input type="password" placeholder="Stored server-side" /></AdminField>
+          </>}
+          {tab === "Security" && <>
+            <AdminField label="Change admin password"><input type="password" placeholder="New password" /></AdminField>
+            <label className="admin-toggle"><span>2FA placeholder</span><input type="checkbox" /></label>
+            <AdminField label="API keys" wide><input type="password" value="••••••••••••••••" readOnly /></AdminField>
+            <AdminEmptyState icon={ShieldCheck} title="Audit logs ready" text="Suspicious admin activity should be logged server-side." />
+          </>}
+          {tab === "Branding" && <>
+            <AdminField label="Logo upload"><div className="upload-area"><Upload className="h-5 w-5" /><span>Upload transparent Z logo</span></div></AdminField>
+            <AdminField label="Favicon upload"><div className="upload-area"><Upload className="h-5 w-5" /><span>Upload favicon</span></div></AdminField>
+            <AdminField label="Accent color"><input type="text" defaultValue="#00D9FF" /></AdminField>
+            <AdminField label="Hero image" wide><input placeholder="/images/hero-reference-characters.png" /></AdminField>
+          </>}
+          <div className="admin-form-actions"><button className="primary-btn">Save Settings</button></div>
+        </form>
+      </AdminPanel>
     </div>
   );
 }
@@ -1613,9 +2035,16 @@ function AdminProducts({ data, headers, onChange }) {
   const [form, setForm] = useState({ ...defaultProductForm, category: catNames[0] || "" });
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState("");
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const editing = products.find((product) => product.id === editingId);
+  const filteredProducts = products
+    .filter((product) => product.name.toLowerCase().includes(search.toLowerCase()))
+    .filter((product) => categoryFilter === "all" || product.category === categoryFilter)
+    .filter((product) => statusFilter === "all" || (product.status || "active") === statusFilter);
 
   useEffect(() => {
     if (!form.category && catNames[0]) setForm((current) => ({ ...current, category: catNames[0] }));
@@ -1649,9 +2078,16 @@ function AdminProducts({ data, headers, onChange }) {
       fd.append("category", form.category);
       fd.append("price", form.price);
       fd.append("badge", form.badge);
+      fd.append("status", form.status);
+      fd.append("currency", form.currency);
+      fd.append("deliveryType", form.deliveryType);
       fd.append("stockCount", form.stockCount);
       fd.append("shortDescription", form.shortDescription);
       fd.append("description", form.description);
+      fd.append("features", form.features);
+      fd.append("slug", form.slug);
+      fd.append("metaTitle", form.metaTitle);
+      fd.append("metaDescription", form.metaDescription);
       if (imageFile) fd.append("image", imageFile);
       else if (form.image) fd.append("image", form.image);
       await api(path, { method, headers, body: fd });
@@ -1680,7 +2116,9 @@ function AdminProducts({ data, headers, onChange }) {
   const currentPreview = imagePreview || form.image || "";
 
   return (
-    <div className="admin-workspace">
+    <div className="admin-content-stack">
+      <AdminPageHeader section="products" title="Products" subtitle="Create, edit, stock, and organize digital products." action={<button className="primary-btn" onClick={reset}><Plus className="h-4 w-4" /> Add Product</button>} />
+      <div className="admin-workspace">
       <div className="admin-panel">
         <div className="admin-panel-head">
           <div>
@@ -1691,6 +2129,7 @@ function AdminProducts({ data, headers, onChange }) {
         </div>
         {(message || error) && <AdminNotice message={message || error} tone={error ? "error" : "success"} />}
         <form className="admin-form" onSubmit={submit}>
+          <div className="admin-form-section-title">Basic information</div>
           <AdminField label="Product name">
             <input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Product name" />
           </AdminField>
@@ -1700,12 +2139,29 @@ function AdminProducts({ data, headers, onChange }) {
               {catNames.map((name) => <option key={name} value={name}>{name}</option>)}
             </select>
           </AdminField>
+          <div className="admin-form-section-title">Pricing & stock</div>
           <AdminField label="Price USD">
             <input type="number" min="0" step="0.01" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} />
+          </AdminField>
+          <AdminField label="Currency">
+            <select value={form.currency} onChange={(event) => setForm({ ...form, currency: event.target.value })}>
+              {CURRENCIES.map((c) => <option key={c.code}>{c.code}</option>)}
+            </select>
           </AdminField>
           <AdminField label="Badge">
             <input value={form.badge} onChange={(event) => setForm({ ...form, badge: event.target.value })} placeholder="Popular" />
           </AdminField>
+          <AdminField label="Status">
+            <select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}>
+              <option>active</option><option>draft</option><option>hidden</option>
+            </select>
+          </AdminField>
+          <AdminField label="Delivery type">
+            <select value={form.deliveryType} onChange={(event) => setForm({ ...form, deliveryType: event.target.value })}>
+              <option>license key</option><option>file download</option><option>account credentials</option><option>private link</option><option>manual delivery</option>
+            </select>
+          </AdminField>
+          <div className="admin-form-section-title">Media</div>
           <AdminField label="Product Image" wide>
             <div className="flex items-start gap-4">
               <label className="upload-area">
@@ -1720,11 +2176,25 @@ function AdminProducts({ data, headers, onChange }) {
           <AdminField label="Stock Count">
             <input type="number" min="0" value={form.stockCount} onChange={(event) => setForm({ ...form, stockCount: event.target.value })} placeholder="Number in stock" />
           </AdminField>
+          <div className="admin-form-section-title">Description</div>
           <AdminField label="Short description" wide>
             <input value={form.shortDescription} onChange={(event) => setForm({ ...form, shortDescription: event.target.value })} placeholder="Short card description" />
           </AdminField>
           <AdminField label="Full description" wide>
             <textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Full product page description" />
+          </AdminField>
+          <AdminField label="Features list" wide help="One feature per line.">
+            <textarea value={form.features} onChange={(event) => setForm({ ...form, features: event.target.value })} placeholder={"Instant delivery\nDashboard access\nReplacement support"} />
+          </AdminField>
+          <div className="admin-form-section-title">SEO / Slug</div>
+          <AdminField label="Product slug">
+            <input value={form.slug} onChange={(event) => setForm({ ...form, slug: event.target.value })} placeholder="chatgpt-plus" />
+          </AdminField>
+          <AdminField label="Meta title">
+            <input value={form.metaTitle} onChange={(event) => setForm({ ...form, metaTitle: event.target.value })} />
+          </AdminField>
+          <AdminField label="Meta description" wide>
+            <input value={form.metaDescription} onChange={(event) => setForm({ ...form, metaDescription: event.target.value })} />
           </AdminField>
           <div className="admin-form-actions">
             <button className="primary-btn">{editing ? "Save Product" : "Create Product"}</button>
@@ -1740,14 +2210,21 @@ function AdminProducts({ data, headers, onChange }) {
             <p>{products.length} products across {catNames.length} categories.</p>
           </div>
         </div>
+        <div className="admin-toolbar">
+          <label><Search className="h-4 w-4" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search products..." /></label>
+          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}><option value="all">All categories</option>{catNames.map((name) => <option key={name}>{name}</option>)}</select>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}><option value="all">All statuses</option><option>active</option><option>draft</option><option>hidden</option></select>
+          <select defaultValue="newest"><option value="newest">Newest</option><option value="popular">Popular</option><option value="stock">Stock</option></select>
+        </div>
         <div className="admin-list">
-          {products.map((product) => (
+          {filteredProducts.map((product) => (
             <div className="admin-product-row" key={product.id}>
               {product.image ? <img src={product.image} alt={product.name} /> : <div className="admin-product-noimg"><Image className="h-6 w-6 text-slate-500" /></div>}
               <div>
                 <strong>{product.name}</strong>
-                <span>{product.category} &bull; {money(product.price)} &bull; {product.stockCount ?? 0} in stock</span>
+                <span>{product.category} &bull; {money(product.price)} &bull; {product.stockCount ?? 0} in stock &bull; {product.badge || "No badge"}</span>
               </div>
+              <StatusBadge status={product.status || "active"} />
               <div className="admin-row-actions">
                 <button className="small-btn" onClick={() => {
                   setEditingId(product.id);
@@ -1759,12 +2236,15 @@ function AdminProducts({ data, headers, onChange }) {
                 }}>
                   Edit
                 </button>
+                <button className="small-btn" onClick={() => { setEditingId(""); setForm(productToForm({ ...product, name: `${product.name} Copy`, slug: "" })); }}>Duplicate</button>
+                <button className="small-btn">Archive</button>
                 <button className="small-btn danger" onClick={() => remove(product)}>Delete</button>
               </div>
             </div>
           ))}
-          {products.length === 0 && <p className="text-slate-400 py-4">No products yet. Create your first product above.</p>}
+          {products.length === 0 && <AdminEmptyState icon={Package} title="No products yet" text="Create your first digital product to start selling." action={<button className="primary-btn" onClick={reset}>Add Product</button>} />}
         </div>
+      </div>
       </div>
     </div>
   );
@@ -1823,7 +2303,9 @@ function AdminCategories({ data, headers, onChange }) {
   };
 
   return (
-    <div className="admin-workspace">
+    <div className="admin-content-stack">
+      <AdminPageHeader section="categories" title="Categories" subtitle="Create and organize storefront browse groups with clean icons and sorting." />
+      <div className="admin-workspace">
       <div className="admin-panel">
         <div className="admin-panel-head">
           <div>
@@ -1881,15 +2363,17 @@ function AdminCategories({ data, headers, onChange }) {
           {categories.length === 0 && <p className="text-slate-400 py-4">No categories yet. Create your first category above.</p>}
         </div>
       </div>
+      </div>
     </div>
   );
 }
 
-function AdminField({ label, children, wide = false }) {
+function AdminField({ label, children, wide = false, help = "" }) {
   return (
     <label className={wide ? "field admin-field-wide" : "field"}>
       <span>{label}</span>
       {children}
+      {help && <small>{help}</small>}
     </label>
   );
 }

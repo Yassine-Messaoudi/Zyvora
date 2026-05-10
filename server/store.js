@@ -417,6 +417,7 @@ export async function getAdminSummary() {
   const invoiceCount = await queryOne("SELECT COUNT(*) as cnt FROM invoices");
   const orderCount = await queryOne("SELECT COUNT(*) as cnt FROM orders");
   const customerCount = await queryOne("SELECT COUNT(*) as cnt FROM customers");
+  const reviewCount = await queryOne("SELECT COUNT(*) as cnt FROM reviews");
   const lowStock = await query(`
     ${PRODUCT_SELECT}
     WHERE p.stock_count <= 1
@@ -428,6 +429,7 @@ export async function getAdminSummary() {
     invoices: invoiceCount.cnt,
     orders: orderCount.cnt,
     customers: customerCount.cnt,
+    reviews: reviewCount.cnt,
     lowStock: lowStock.map(normalizeProductRow).map(publicProduct)
   };
 }

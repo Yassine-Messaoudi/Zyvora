@@ -49,6 +49,7 @@ const app = express();
 const port = Number(process.env.PORT || 8787);
 const jwtSecret = process.env.JWT_SECRET || "dev-only-change-this-secret";
 
+app.set("trust proxy", 1);
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: process.env.CLIENT_ORIGIN || "*" }));
 app.use(express.json({ limit: "10mb" }));
