@@ -22,7 +22,7 @@ import {
   findOrCreateCustomer, getCustomerByEmail, updateCustomerLastOrder,
   getActiveCoupon, addActivityLog, addDeliveryLog, getAdminSummary
 } from "./store.js";
-import { getWalletAddress, calculateCryptoAmount, createQrData, supportedCoins } from "./payments.js";
+import { getWalletAddress, calculateCryptoAmount, createQrData, supportedCoins, getLivePrices, convertFiat } from "./payments.js";
 import { sendDeliveryEmail, sendDiscordWebhook } from "./delivery.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -30,6 +30,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 function fileToDataUrl(file) {
   const mime = file.mimetype || "image/png";
   return `data:${mime};base64,${file.buffer.toString("base64")}`;
+}
+
+function toMySQLDatetime(date) {
+  return date.toISOString().slice(0, 19).replace("T", " ");
 }
 
 const upload = multer({
@@ -163,6 +167,15 @@ app.get("/api/health", async (_req, res) => {
   res.json({ ok: true, storeName: settings.storeName || "Zyvora Market", coins: supportedCoins() });
 });
 
+app.get("/api/prices", async (_req, res) => {
+  try {
+    const prices = await getLivePrices();
+    res.json(prices);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch prices" });
+  }
+});
+
 app.get("/api/categories", async (_req, res) => {
   const cats = await getAllCategories();
   res.json(cats);
@@ -222,7 +235,7 @@ app.post("/api/invoices", checkoutLimiter, async (req, res) => {
       const existingAmounts = allInvoices
         .filter((inv) => inv.selectedCoin === parsed.data.paymentMethod && inv.status === "pending")
         .map((inv) => inv.expectedCryptoAmount);
-      expectedCryptoAmount = calculateCryptoAmount(totalUsd, parsed.data.paymentMethod, existingAmounts);
+      expectedCryptoAmount = await calculateCryptoAmount(totalUsd, parsed.data.paymentMethod, existingAmounts);
       const qr = await createQrData(parsed.data.paymentMethod, depositAddress, expectedCryptoAmount, id);
       qrCodeData = qr.data;
       qrCode = qr.qrCode;
@@ -247,8 +260,8 @@ app.post("/api/invoices", checkoutLimiter, async (req, res) => {
       confirmationCount: 0,
       mockDetected: 0,
       status: parsed.data.paymentMethod === "BALANCE" ? "paid" : "pending",
-      createdAt: createdAt.toISOString(),
-      expiresAt: new Date(createdAt.getTime() + 15 * 60 * 1000).toISOString()
+      createdAt: toMySQLDatetime(createdAt),
+      expiresAt: toMySQLDatetime(new Date(createdAt.getTime() + 60 * 60 * 1000))
     };
     const invoice = await createInvoice(invoiceData);
     await addActivityLog("invoice_created", id);

@@ -62,7 +62,7 @@ const ADMIN_TOKEN_KEY = "zyvora-admin-token";
 const CartContext = createContext(null);
 
 function money(value) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value || 0);
+  return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(value || 0);
 }
 
 async function api(path, options = {}) {
@@ -926,12 +926,14 @@ function CheckoutPage() {
 function InvoicePage({ invoiceId }) {
   const [invoice, setInvoice] = useState(null);
   const [discordLink, setDiscordLink] = useState("");
+  const [prices, setPrices] = useState(null);
   const [error, setError] = useState("");
   const [now, setNow] = useState(Date.now());
   const [copied, setCopied] = useState("");
   useEffect(() => {
     api(`/invoices/${invoiceId}`).then(setInvoice).catch((err) => setError(err.message));
     api("/settings/public").then((s) => setDiscordLink(s.discordInvite || "")).catch(() => {});
+    api("/prices").then(setPrices).catch(() => {});
     const tick = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(tick);
   }, [invoiceId]);
@@ -1037,6 +1039,23 @@ function InvoicePage({ invoiceId }) {
         <div className="inv-info-row"><span>Created</span><span className="inv-info-val">{createdAgo()}</span></div>
         <div className="inv-info-row"><span>Expires</span><span className="inv-info-val">{expiresIn()}</span></div>
       </div>
+      {prices && prices.fiatRates && (
+        <div className="inv-info-table" style={{marginTop:"1rem"}}>
+          <p className="inv-info-title">PRICE IN OTHER CURRENCIES</p>
+          {Object.entries({
+            USD: prices.fiatRates.eurTousd,
+            USDT: prices.fiatRates.eurTousdt,
+            GBP: prices.fiatRates.eurTogbp,
+            TRY: prices.fiatRates.eurTotry,
+            CNY: prices.fiatRates.eurTocny
+          }).filter(([,r]) => r).map(([fiat, rate]) => (
+            <div className="inv-info-row" key={fiat}>
+              <span>{fiat}</span>
+              <span className="inv-info-val">{(invoice.totalUsd * rate).toFixed(2)} {fiat}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
