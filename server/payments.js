@@ -7,49 +7,88 @@ const coinMeta = {
   ETH: { label: "Ethereum", uri: "ethereum", geckoId: "ethereum" }
 };
 
-// ── Live price cache (refreshes every 60s) ──
+// ── Live price cache (refreshes every 120s) ──
 let priceCache = { rates: {}, fiatRates: {}, lastFetch: 0 };
-const CACHE_TTL = 60_000;
+const CACHE_TTL = 120_000;
 
 const FIAT_CURRENCIES = ["usd", "eur", "usdt", "try", "cny", "gbp"];
+
+// Fetch prices from CoinGecko
+async function fetchFromCoinGecko() {
+  const ids = Object.values(coinMeta).map((m) => m.geckoId).join(",");
+  const vs = FIAT_CURRENCIES.join(",");
+  const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=${vs}`);
+  if (!res.ok) throw new Error(`CoinGecko HTTP ${res.status}`);
+  const data = await res.json();
+
+  const rates = {};
+  for (const [symbol, meta] of Object.entries(coinMeta)) {
+    const coinData = data[meta.geckoId];
+    if (coinData) {
+      rates[symbol] = {};
+      for (const fiat of FIAT_CURRENCIES) rates[symbol][fiat] = coinData[fiat] || 0;
+    }
+  }
+  const fiatRates = {};
+  const btcPrices = data.bitcoin || {};
+  if (btcPrices.eur && btcPrices.usd) {
+    for (const fiat of FIAT_CURRENCIES) {
+      if (btcPrices[fiat] && btcPrices.eur) fiatRates[`eurTo${fiat}`] = btcPrices[fiat] / btcPrices.eur;
+    }
+  }
+  return { rates, fiatRates };
+}
+
+// Fallback: fetch prices from Binance API (free, no key, very reliable)
+async function fetchFromBinance() {
+  const symbols = [];
+  for (const symbol of Object.keys(coinMeta)) {
+    for (const fiat of ["EUR", "USDT"]) symbols.push(`${symbol}${fiat}`);
+  }
+  const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbols=${JSON.stringify(symbols)}`);
+  if (!res.ok) throw new Error(`Binance HTTP ${res.status}`);
+  const data = await res.json();
+
+  const priceMap = {};
+  for (const item of data) priceMap[item.symbol] = Number(item.price);
+
+  // Get EUR/USD rate from BTC pairs
+  const btcEur = priceMap.BTCEUR || 0;
+  const btcUsdt = priceMap.BTCUSDT || 0;
+  const eurToUsd = btcEur && btcUsdt ? btcUsdt / btcEur : 1.08;
+
+  const rates = {};
+  for (const symbol of Object.keys(coinMeta)) {
+    rates[symbol] = {
+      eur: priceMap[`${symbol}EUR`] || 0,
+      usd: priceMap[`${symbol}USDT`] || 0,
+      usdt: priceMap[`${symbol}USDT`] || 0
+    };
+  }
+  const fiatRates = { eurTousd: eurToUsd, eurTousdt: eurToUsd };
+  return { rates, fiatRates };
+}
 
 async function fetchPrices() {
   if (Date.now() - priceCache.lastFetch < CACHE_TTL && Object.keys(priceCache.rates).length) {
     return priceCache;
   }
+  // Try CoinGecko first, fallback to Binance
+  let result = null;
   try {
-    const ids = Object.values(coinMeta).map((m) => m.geckoId).join(",");
-    const vs = FIAT_CURRENCIES.join(",");
-    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=${vs}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`CoinGecko HTTP ${res.status}`);
-    const data = await res.json();
-
-    const rates = {};
-    const fiatRates = {};
-    for (const [symbol, meta] of Object.entries(coinMeta)) {
-      const coinData = data[meta.geckoId];
-      if (coinData) {
-        rates[symbol] = {};
-        for (const fiat of FIAT_CURRENCIES) {
-          rates[symbol][fiat] = coinData[fiat] || 0;
-        }
-      }
-    }
-    // Derive fiat cross-rates from BTC prices (e.g., EUR/USD)
-    const btcPrices = data.bitcoin || {};
-    if (btcPrices.eur && btcPrices.usd) {
-      fiatRates.eurToUsd = btcPrices.usd / btcPrices.eur;
-      for (const fiat of FIAT_CURRENCIES) {
-        if (btcPrices[fiat] && btcPrices.eur) {
-          fiatRates[`eurTo${fiat}`] = btcPrices[fiat] / btcPrices.eur;
-        }
-      }
-    }
-    priceCache = { rates, fiatRates, lastFetch: Date.now() };
-    console.log("[prices] Refreshed live crypto prices");
+    result = await fetchFromCoinGecko();
+    console.log("[prices] Refreshed from CoinGecko");
   } catch (err) {
-    console.error("[prices] CoinGecko fetch failed, using cached:", err.message);
+    console.warn("[prices] CoinGecko failed:", err.message, "— trying Binance...");
+    try {
+      result = await fetchFromBinance();
+      console.log("[prices] Refreshed from Binance (fallback)");
+    } catch (err2) {
+      console.error("[prices] Binance also failed:", err2.message);
+    }
+  }
+  if (result && Object.keys(result.rates).length) {
+    priceCache = { ...result, lastFetch: Date.now() };
   }
   return priceCache;
 }

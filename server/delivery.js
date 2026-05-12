@@ -58,13 +58,16 @@ function getTransport() {
 // Unified send: tries Resend first, then SMTP
 async function sendEmail({ from, to, subject, text, html }) {
   const sender = from || process.env.SMTP_FROM || "Zyvora <noreply@zyvory.xyz>";
+  const hasResend = !!process.env.RESEND_API_KEY;
+  console.log(`[email] Sending to ${to} | Resend=${hasResend ? "YES" : "NO"} | from="${sender}"`);
   // Try Resend first (HTTP, never blocked)
-  if (process.env.RESEND_API_KEY) {
+  if (hasResend) {
     return sendViaResend({ from: sender, to, subject, text, html });
   }
   // Fallback to SMTP
+  console.log("[email] No RESEND_API_KEY, falling back to SMTP...");
   const transport = getTransport();
-  if (!transport) return false;
+  if (!transport) { console.error("[email] SMTP not configured either — no way to send email"); return false; }
   await transport.sendMail({ from: sender, to, subject, text, html });
   return true;
 }
