@@ -1344,8 +1344,25 @@ function InvoicePage({ invoiceId }) {
         <div className="inv-paid-banner">
           <CheckCircle2 className="h-12 w-12 text-green-400" />
           <h2>Payment Confirmed!</h2>
-          <p>Your order has been processed. Check your dashboard for delivery details.</p>
-          <Link href={`/dashboard?invoiceId=${invoice.id}`} className="co-proceed-btn" style={{maxWidth:"320px",margin:"1rem auto 0"}}>
+          <p style={{marginBottom:"0.75rem"}}>Your payment has been verified. Please open a support ticket to receive your order.</p>
+          <div style={{background:"rgba(37,99,235,0.08)",border:"1px solid rgba(37,99,235,0.25)",borderRadius:"12px",padding:"1.25rem",textAlign:"left",maxWidth:"440px",margin:"0 auto 1rem"}}>
+            <p style={{margin:"0 0 0.5rem",fontSize:"0.8rem",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.05em",color:"#8b949e"}}>Include in your ticket</p>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"0.4rem 0",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
+              <span style={{color:"#8b949e",fontSize:"0.85rem"}}>Order ID</span>
+              <span style={{color:"#f0f6ff",fontWeight:600,fontSize:"0.85rem",fontFamily:"monospace"}}>{invoice.orderId || invoice.id}</span>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"0.4rem 0"}}>
+              <span style={{color:"#8b949e",fontSize:"0.85rem"}}>Email</span>
+              <span style={{color:"#f0f6ff",fontWeight:600,fontSize:"0.85rem"}}>{invoice.customerEmail}</span>
+            </div>
+          </div>
+          <p style={{color:"#22c55e",fontWeight:600,fontSize:"0.9rem",margin:"0 0 1rem"}}>⚡ You will receive your order within 10 minutes max</p>
+          {discordLink && (
+            <a href={discordLink} target="_blank" rel="noopener noreferrer" className="co-proceed-btn" style={{maxWidth:"340px",margin:"0 auto 0.75rem",display:"flex",alignItems:"center",justifyContent:"center",gap:"0.5rem"}}>
+              <MessageCircle className="h-5 w-5" /> Open a Ticket on Discord
+            </a>
+          )}
+          <Link href={`/dashboard?email=${encodeURIComponent(invoice.customerEmail)}`} className="co-proceed-btn" style={{maxWidth:"340px",margin:"0 auto",background:"transparent",border:"1px solid rgba(255,255,255,0.12)"}}>
             Open Dashboard <span className="co-arrow">→</span>
           </Link>
         </div>
