@@ -25,6 +25,15 @@ const commands = [
     .toJSON()
 ];
 
+const intents = [
+  GatewayIntentBits.Guilds,
+  GatewayIntentBits.GuildMessages
+];
+
+if (process.env.ENABLE_MESSAGE_CONTENT_INTENT === "true") {
+  intents.push(GatewayIntentBits.MessageContent);
+}
+
 async function registerCommands() {
   const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
 
@@ -43,11 +52,7 @@ async function registerCommands() {
 }
 
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
-  ]
+  intents
 });
 
 client.once("ready", async () => {

@@ -42,4 +42,10 @@ The bot posts the Zyvory ticket panel with the `zyvory_gif.gif` banner and suppo
 - Customer presses `Order Received` after the replacement/order works.
 - Closing a ticket creates an HTML transcript and sends it to the log channel/customer before deleting the channel.
 
-For transcripts to include message text, enable the `Message Content Intent` for the bot in the Discord Developer Portal.
+For transcripts to include message text, enable the `Message Content Intent` for the bot in the Discord Developer Portal, then set:
+
+```env
+ENABLE_MESSAGE_CONTENT_INTENT=true
+```
+
+Leave it as `false` if Discord shows `Used disallowed intents`.
