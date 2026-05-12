@@ -23,7 +23,7 @@ import {
   getActiveCoupon, addActivityLog, addDeliveryLog, getAdminSummary
 } from "./store.js";
 import { getWalletAddress, calculateCryptoAmount, createQrData, supportedCoins, getLivePrices, convertFiat } from "./payments.js";
-import { sendDeliveryEmail, sendDiscordWebhook } from "./delivery.js";
+import { sendDeliveryEmail, sendDiscordWebhook, sendVerificationEmail } from "./delivery.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -57,6 +57,10 @@ app.use(express.json({ limit: "10mb" }));
 
 const checkoutLimiter = rateLimit({ windowMs: 60_000, limit: 12 });
 const adminLimiter = rateLimit({ windowMs: 60_000, limit: 20 });
+const dashboardCodeLimiter = rateLimit({ windowMs: 60_000, limit: 5 });
+
+// In-memory verification code store: email -> { code, expiresAt }
+const verificationCodes = new Map();
 
 function makeInvoiceId() {
   const ts = Date.now().toString(36).toUpperCase();
@@ -311,6 +315,47 @@ app.get("/api/invoices/:id", async (req, res) => {
 app.get("/api/settings/public", async (_req, res) => {
   const settings = await getSettings();
   res.json({ discordInvite: settings.discordInvite || "https://discord.gg/Zhd6unzQGm" });
+});
+
+app.post("/api/dashboard/send-code", dashboardCodeLimiter, async (req, res) => {
+  const email = String(req.body.email || "").toLowerCase().trim();
+  if (!email || !email.includes("@")) return res.status(400).json({ error: "Valid email required" });
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  verificationCodes.set(email, { code, expiresAt: Date.now() + 10 * 60 * 1000 });
+  try {
+    const sent = await sendVerificationEmail(email, code);
+    if (!sent) return res.status(500).json({ error: "Email service not configured. Contact support." });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Failed to send verification email:", err.message);
+    res.status(500).json({ error: "Failed to send email. Please try again." });
+  }
+});
+
+app.post("/api/dashboard/verify-code", dashboardCodeLimiter, async (req, res) => {
+  const email = String(req.body.email || "").toLowerCase().trim();
+  const code = String(req.body.code || "").trim();
+  if (!email || !code) return res.status(400).json({ error: "Email and code required" });
+  const stored = verificationCodes.get(email);
+  if (!stored) return res.status(400).json({ error: "No code sent for this email. Request a new one." });
+  if (Date.now() > stored.expiresAt) {
+    verificationCodes.delete(email);
+    return res.status(400).json({ error: "Code expired. Request a new one." });
+  }
+  if (stored.code !== code) return res.status(400).json({ error: "Invalid code. Please try again." });
+  verificationCodes.delete(email);
+  // Return dashboard data
+  const allInvoices = await getAllInvoices();
+  const invoices = allInvoices.filter((inv) => inv.customerEmail === email);
+  const allOrders = await getAllOrders();
+  const orders = allOrders.filter((order) => invoices.some((inv) => inv.id === order.invoiceId));
+  const customer = (await getCustomerByEmail(email)) || { email, balance: 0 };
+  const allReviews = await getApprovedReviews();
+  const reviewCount = allReviews.filter((r) => {
+    const matchInvoice = invoices.some((inv) => inv.id === r.invoiceId);
+    return matchInvoice;
+  }).length;
+  res.json({ customer, invoices, orders, reviewCount });
 });
 
 app.get("/api/dashboard", async (req, res) => {

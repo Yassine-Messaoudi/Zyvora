@@ -1481,142 +1481,335 @@ function CopyField({ label, value }) {
 
 function DashboardPage() {
   const route = useRouteContext();
-  const [lookup, setLookup] = useState({ email: new URLSearchParams(route.search).get("email") || "", invoiceId: new URLSearchParams(route.search).get("invoiceId") || "" });
+  const LOGO = "https://res.cloudinary.com/db4mpxc2k/image/upload/v1778619521/Zyvolalogo_yecrow.png";
+  const [step, setStep] = useState("email"); // email | code | dashboard
+  const [email, setEmail] = useState(new URLSearchParams(route.search).get("email") || "");
+  const [code, setCode] = useState("");
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
-  const load = async (event) => {
-    event?.preventDefault();
-    setError("");
-    if (!lookup.email.trim() && !lookup.invoiceId.trim()) {
-      setError("Enter your email address to continue.");
-      return;
-    }
-    try {
-      const params = new URLSearchParams();
-      if (lookup.email) params.set("email", lookup.email);
-      if (lookup.invoiceId) params.set("invoiceId", lookup.invoiceId);
-      setData(await api(`/dashboard?${params}`));
-    } catch (err) {
-      setError(err.message);
-    }
-  };
+  const [loading, setLoading] = useState(false);
+  const [tab, setTab] = useState("home");
+  const [resendTimer, setResendTimer] = useState(0);
+
   useEffect(() => {
-    if (lookup.email || lookup.invoiceId) load();
-  }, []);
+    if (resendTimer <= 0) return;
+    const t = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendTimer]);
+
+  const sendCode = async (e) => {
+    e?.preventDefault();
+    if (!email.trim()) { setError("Enter your email address."); return; }
+    setError(""); setLoading(true);
+    try {
+      await api("/dashboard/send-code", { method: "POST", body: JSON.stringify({ email }) });
+      setStep("code"); setResendTimer(60);
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
+  };
+
+  const verifyCode = async (e) => {
+    e?.preventDefault();
+    if (!code.trim()) { setError("Enter the 6-digit code."); return; }
+    setError(""); setLoading(true);
+    try {
+      const result = await api("/dashboard/verify-code", { method: "POST", body: JSON.stringify({ email, code }) });
+      setData(result); setStep("dashboard");
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
+  };
+
+  const logout = () => { setData(null); setStep("email"); setCode(""); setError(""); };
+
+  const greetName = (data?.customer?.email || email || "").split("@")[0];
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+
+  // Dashboard stats
+  const paidOrders = (data?.orders || []).filter(o => o.status === "completed");
+  const totalOrders = (data?.invoices || []).length;
+  const paidCount = paidOrders.length;
+  const balance = data?.customer?.balance || 0;
+  const reviewCount = data?.reviewCount || 0;
+  const recentOrders = paidOrders.slice(-5).reverse();
+
+  // Downloads: extract delivered items from orders
+  const downloads = paidOrders.flatMap(order => {
+    const items = typeof order.deliveryItems === "string" ? JSON.parse(order.deliveryItems) : (order.deliveryItems || []);
+    return items.map(item => ({ ...item, orderId: order.id, orderDate: order.createdAt }));
+  });
+
+  if (step !== "dashboard") {
+    return (
+      <section className="cd-auth-page">
+        <div className="cd-auth-topbar">
+          <Link href="/" className="cd-back-link"><span>←</span> Back to store</Link>
+          <div className="cd-lang-wrap">
+            <span className="cd-lang-flag">🇬🇧</span>
+            <select className="cd-lang-select" defaultValue="English"><option>English</option></select>
+          </div>
+        </div>
+        <div className="cd-auth-center">
+          <img className="cd-auth-logo" src={LOGO} alt="Zyvora" />
+          {step === "email" ? (
+            <form className="cd-auth-card" onSubmit={sendCode}>
+              <h1>Welcome back</h1>
+              <p>Enter your email to receive a verification code and access your dashboard.</p>
+              <label>
+                <span>Email address <b>*</b></span>
+                <input required type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="user@example.com" />
+              </label>
+              {error && <div className="cd-auth-error"><AlertTriangle className="h-4 w-4" /> {error}</div>}
+              <button type="submit" disabled={loading}>{loading ? "Sending..." : "Send Code"} <span>›</span></button>
+            </form>
+          ) : (
+            <form className="cd-auth-card" onSubmit={verifyCode}>
+              <h1>Check your email</h1>
+              <p>We sent a 6-digit code to <strong>{email}</strong></p>
+              <label>
+                <span>Verification code <b>*</b></span>
+                <input required type="text" inputMode="numeric" maxLength={6} value={code} onChange={e => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" className="cd-code-input" autoFocus />
+              </label>
+              {error && <div className="cd-auth-error"><AlertTriangle className="h-4 w-4" /> {error}</div>}
+              <button type="submit" disabled={loading}>{loading ? "Verifying..." : "Verify & Login"} <span>›</span></button>
+              <div className="cd-auth-actions">
+                <button type="button" className="cd-text-btn" onClick={() => { setStep("email"); setCode(""); setError(""); }}>← Change email</button>
+                <button type="button" className="cd-text-btn" disabled={resendTimer > 0} onClick={sendCode}>{resendTimer > 0 ? `Resend in ${resendTimer}s` : "Resend code"}</button>
+              </div>
+            </form>
+          )}
+          <p className="cd-auth-footer">© {new Date().getFullYear()} Zyvora. All rights reserved.</p>
+        </div>
+      </section>
+    );
+  }
+
   return (
-    <section className="customer-auth-page">
-      <div className="customer-auth-topbar">
-        <Link href="/" className="customer-back-link">
-          <span>←</span> Back to store
-        </Link>
-        <label className="customer-language-wrap" aria-label="Language">
-          <UsFlagIcon />
-          <select className="customer-language" defaultValue="English">
-            <option>English</option>
-          </select>
-        </label>
-      </div>
-      <div className="customer-auth-center">
-        <img className="customer-auth-logo" src="/images/zyvola-logo.png" alt="Zyvory logo" />
-        {!data ? (
-          <form className="customer-auth-card" onSubmit={load}>
-            <h1>Welcome back</h1>
-            <p>Enter your email to view your orders, invoices, downloads, and support.</p>
-            <label>
-              <span>Email address <b>*</b></span>
-              <input
-                required
-                type="email"
-                value={lookup.email}
-                onChange={(event) => setLookup({ ...lookup, email: event.target.value })}
-                placeholder="user@example.com"
-              />
-            </label>
-            {error && <div className="customer-auth-error">{error}</div>}
-            <button type="submit">
-              Next <span>›</span>
+    <section className="cd-shell">
+      {/* Top nav bar */}
+      <header className="cd-topbar">
+        <div className="cd-topbar-inner">
+          <Link href="/" className="cd-brand">
+            <img src={LOGO} alt="Zyvora" className="cd-brand-logo" />
+            <span className="cd-brand-name">Zyvora</span>
+          </Link>
+          <div className="cd-topbar-search">
+            <Search className="h-4 w-4" />
+            <input placeholder="Search for orders, tickets, products..." readOnly />
+          </div>
+          <div className="cd-topbar-right">
+            <div className="cd-lang-wrap">
+              <span className="cd-lang-flag">🇬🇧</span>
+              <select className="cd-lang-select" defaultValue="English"><option>English</option></select>
+            </div>
+            <div className="cd-user-pill">
+              <span className="cd-user-avatar">{greetName.slice(0, 2).toUpperCase()}</span>
+              <span className="cd-user-name">{greetName}</span>
+            </div>
+            <button type="button" className="cd-logout-btn" onClick={logout}>Logout</button>
+          </div>
+        </div>
+      </header>
+
+      {/* Tabs */}
+      <div className="cd-tabs">
+        <div className="cd-tabs-inner">
+          {[["home", "Home", LayoutDashboard], ["orders", "Orders", Package], ["downloads", "Downloads", Download], ["support", "Support", MessageCircle]].map(([key, label, Icon]) => (
+            <button key={key} className={`cd-tab ${tab === key ? "active" : ""}`} onClick={() => setTab(key)}>
+              <Icon className="h-4 w-4" /> {label}
             </button>
-          </form>
-        ) : (
-          <div className="customer-dashboard-panel">
-            <aside className="customer-summary-card">
-              <UserCircle className="h-8 w-8 text-blue-300" />
-              <p>{data.customer.email || lookup.email || "Customer"}</p>
-              <span>Balance</span>
-              <strong>{money(data.customer.balance || 0)}</strong>
-              <button type="button" onClick={() => setData(null)}>Use another email</button>
-            </aside>
-            <div className="customer-dashboard-stack">
-              <DashboardBlock title="Orders" icon={Package}>
-                {(data.orders || []).length ? (data.orders || []).map((order) => <OrderCard order={order} key={order.id} />) : <p className="text-slate-400">No completed orders found.</p>}
-              </DashboardBlock>
-              <DashboardBlock title="Invoices" icon={Wallet}>
-                {(data.invoices || []).length ? (data.invoices || []).map((invoice) => (
-                  <div className="table-row" key={invoice.id}>
-                    <span>{invoice.id}</span>
-                    <span>{invoice.status}</span>
-                    <span>{money(invoice.totalUsd)}</span>
+          ))}
+        </div>
+      </div>
+
+      {/* Main content */}
+      <main className="cd-main">
+        <div className="cd-container">
+          {tab === "home" && (
+            <>
+              <div className="cd-welcome">
+                <h1>{greeting}, <span>{greetName}</span></h1>
+                <p>Here's a summary of your account and recent activity.</p>
+              </div>
+              <div className="cd-stat-grid">
+                <div className="cd-stat-card">
+                  <div className="cd-stat-head"><span>Total Orders</span><Package className="h-5 w-5 text-blue-400" /></div>
+                  <p className="cd-stat-sub">All time orders</p>
+                  <span className="cd-stat-value">{totalOrders}</span>
+                </div>
+                <div className="cd-stat-card cd-stat-wide">
+                  <div className="cd-stat-head"><span>Balance</span><Wallet className="h-5 w-5 text-green-400" /></div>
+                  <p className="cd-stat-sub">Your current account balance and transaction history</p>
+                  <div className="cd-balance-row">
+                    <div>
+                      <span className="cd-balance-amount">{money(balance)}</span>
+                      <span className="cd-balance-label">Current Balance</span>
+                    </div>
+                    <div>
+                      <span className="cd-stat-value">{paidCount}</span>
+                      <span className="cd-balance-label">Paid Orders</span>
+                    </div>
                   </div>
-                )) : <p className="text-slate-400">No invoices found.</p>}
-              </DashboardBlock>
-            </div>
-          </div>
-        )}
-        <p className="customer-auth-copy">© 2026 Zyvory. All rights reserved.</p>
-      </div>
+                </div>
+                <div className="cd-stat-card">
+                  <div className="cd-stat-head"><span>Total Reviews</span><Star className="h-5 w-5 text-yellow-400" /></div>
+                  <p className="cd-stat-sub">Reviews given</p>
+                  <span className="cd-stat-value">{reviewCount}</span>
+                </div>
+              </div>
+              <div className="cd-section">
+                <div className="cd-section-head">
+                  <h2>Recent Orders</h2>
+                  <p>Your last {recentOrders.length} most recent orders</p>
+                </div>
+                {recentOrders.length > 0 ? (
+                  <div className="cd-orders-table">
+                    <div className="cd-table-header">
+                      <span>ORDER</span><span>DATE</span><span>AMOUNT</span><span>STATUS</span><span></span>
+                    </div>
+                    {recentOrders.map(order => {
+                      const inv = (data.invoices || []).find(i => i.id === order.invoiceId);
+                      const items = typeof order.items === "string" ? JSON.parse(order.items) : (order.items || []);
+                      const date = new Date(order.createdAt);
+                      return (
+                        <div className="cd-table-row" key={order.id}>
+                          <div className="cd-order-id-cell">
+                            <CheckCircle2 className="h-5 w-5 text-green-400" />
+                            <div>
+                              <span className="cd-order-id">{order.id}</span>
+                              <span className="cd-order-sub">Order ID</span>
+                            </div>
+                          </div>
+                          <span className="cd-order-date">{date.toLocaleDateString("en-GB")}<br/><small>{date.toLocaleTimeString("en-GB", {hour:"2-digit",minute:"2-digit"})}</small></span>
+                          <span className="cd-order-amount">{money(inv?.totalUsd || order.totalUsd)}</span>
+                          <span className={`cd-status ${order.status === "completed" ? "delivered" : order.status === "cancelled" ? "cancelled" : ""}`}>
+                            <CheckCircle2 className="h-3.5 w-3.5" /> {order.status === "completed" ? "Delivered" : order.status}
+                          </span>
+                          <button className="cd-view-btn" onClick={() => { setTab("orders"); }}>View</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="cd-empty">
+                    <Package className="h-10 w-10 text-slate-500" />
+                    <h3>No orders yet</h3>
+                    <p>Your completed orders will appear here.</p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {tab === "orders" && (
+            <>
+              <div className="cd-welcome">
+                <h1>Orders</h1>
+                <p>View and manage your order history.</p>
+              </div>
+              {paidOrders.length > 0 ? (
+                <div className="cd-orders-table">
+                  <div className="cd-table-header">
+                    <span>ORDER</span><span>PRODUCTS</span><span>DATE</span><span>AMOUNT</span><span>STATUS</span>
+                  </div>
+                  {[...paidOrders].reverse().map(order => {
+                    const inv = (data.invoices || []).find(i => i.id === order.invoiceId);
+                    const items = typeof order.items === "string" ? JSON.parse(order.items) : (order.items || []);
+                    const deliveryItems = typeof order.deliveryItems === "string" ? JSON.parse(order.deliveryItems) : (order.deliveryItems || []);
+                    const date = new Date(order.createdAt);
+                    const daysAgo = Math.floor((Date.now() - date.getTime()) / 86400000);
+                    const agoText = daysAgo === 0 ? "today" : daysAgo === 1 ? "1d ago" : `${daysAgo}d ago`;
+                    return (
+                      <div className="cd-table-row" key={order.id}>
+                        <div className="cd-order-id-cell">
+                          <CheckCircle2 className="h-5 w-5 text-green-400" />
+                          <div>
+                            <span className="cd-order-id">{order.id}</span>
+                            <span className="cd-order-sub">{agoText}</span>
+                          </div>
+                        </div>
+                        <div className="cd-order-products">
+                          <span className="cd-product-name">{items.map(i => i.name).join(", ")}</span>
+                          <span className="cd-product-detail">{items.map(i => `${i.name} × ${i.quantity}`).join(", ")}</span>
+                        </div>
+                        <span className="cd-order-date">{date.toLocaleDateString("en-GB")}<br/><small>{date.toLocaleTimeString("en-GB", {hour:"2-digit",minute:"2-digit"})}</small></span>
+                        <span className="cd-order-amount">{money(inv?.totalUsd || order.totalUsd)}</span>
+                        <span className={`cd-status ${order.status === "completed" ? "delivered" : order.status === "cancelled" ? "cancelled" : ""}`}>
+                          <CheckCircle2 className="h-3.5 w-3.5" /> {order.status === "completed" ? "Delivered" : order.status}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="cd-empty">
+                  <Package className="h-10 w-10 text-slate-500" />
+                  <h3>No orders found</h3>
+                  <p>You haven't made any purchases yet.</p>
+                </div>
+              )}
+            </>
+          )}
+
+          {tab === "downloads" && (
+            <>
+              <div className="cd-welcome">
+                <h1>Download Center</h1>
+                <p>Access all your purchased files and digital content in one place.</p>
+              </div>
+              {downloads.length > 0 ? (
+                <div className="cd-downloads-grid">
+                  {downloads.map((item, idx) => (
+                    <div className="cd-download-card" key={`${item.productId}-${idx}`}>
+                      <div className="cd-download-icon"><Download className="h-5 w-5 text-blue-400" /></div>
+                      <div className="cd-download-info">
+                        <strong>{item.name}</strong>
+                        <span className="cd-download-order">Order: {item.orderId}</span>
+                        {item.delivered?.map((val, i) => (
+                          <code className="cd-download-value" key={i}>{val}</code>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="cd-empty">
+                  <Download className="h-10 w-10 text-slate-500" />
+                  <h3>No downloads available</h3>
+                  <p>You don't have any downloadable files yet. Files from your purchases will appear here.</p>
+                </div>
+              )}
+            </>
+          )}
+
+          {tab === "support" && (
+            <>
+              <div className="cd-welcome" style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"1rem"}}>
+                <div>
+                  <h1>Support Tickets</h1>
+                  <p>Manage your support tickets and get help from our team</p>
+                </div>
+                <a href="https://discord.gg/PKWwqG8uYB" target="_blank" rel="noopener noreferrer" className="cd-create-ticket-btn">
+                  <Plus className="h-4 w-4" /> Create ticket
+                </a>
+              </div>
+              <div className="cd-empty">
+                <MessageCircle className="h-10 w-10 text-slate-500" />
+                <h3>No support tickets</h3>
+                <p>You haven't created any support tickets yet.</p>
+                <a href="https://discord.gg/PKWwqG8uYB" target="_blank" rel="noopener noreferrer" className="cd-create-ticket-btn" style={{marginTop:"1rem"}}>
+                  <Plus className="h-4 w-4" /> Create ticket
+                </a>
+              </div>
+            </>
+          )}
+        </div>
+      </main>
+
+      <footer className="cd-footer">
+        <p>© {new Date().getFullYear()} Zyvora. All rights reserved.</p>
+      </footer>
     </section>
-  );
-}
-
-function UsFlagIcon() {
-  return (
-    <svg className="customer-language-flag" viewBox="0 0 7410 3900" aria-hidden="true">
-      <path fill="#b22234" d="M0 0h7410v3900H0z" />
-      <path stroke="#fff" strokeWidth="300" d="M0 450h7410M0 1050h7410M0 1650h7410M0 2250h7410M0 2850h7410M0 3450h7410" />
-      <path fill="#3c3b6e" d="M0 0h2964v2100H0z" />
-      <g fill="#fff">
-        {Array.from({ length: 9 }).map((_, row) =>
-          Array.from({ length: row % 2 === 0 ? 6 : 5 }).map((__, col) => (
-            <circle key={`${row}-${col}`} cx={247 + col * 494 + (row % 2 ? 247 : 0)} cy={210 + row * 210} r="55" />
-          ))
-        )}
-      </g>
-    </svg>
-  );
-}
-
-function DashboardBlock({ title, icon: Icon, children }) {
-  return (
-    <div className="admin-panel">
-      <h3 className="mb-5 flex items-center gap-2 text-xl font-black text-white">
-        <Icon className="h-5 w-5 text-blue-300" /> {title}
-      </h3>
-      {children}
-    </div>
-  );
-}
-
-function OrderCard({ order }) {
-  return (
-    <div className="order-card">
-      <div className="flex items-center justify-between gap-3">
-        <strong className="text-white">{order.id}</strong>
-        <span className="pill">{order.status}</span>
-      </div>
-      <div className="mt-4 grid gap-3">
-        {order.deliveryItems.map((item) => (
-          <div key={item.productId} className="delivery-item">
-            <Download className="h-5 w-5 text-blue-300" />
-            <div>
-              <p className="font-bold text-white">{item.name}</p>
-              {item.delivered.map((value) => (
-                <code key={value}>{value}</code>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
   );
 }
 

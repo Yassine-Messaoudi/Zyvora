@@ -1,0 +1,15 @@
+{
+  "name": "zyvory-ticket-bot",
+  "version": "1.0.0",
+  "description": "Zyvory Discord ticket bot using Discord Components V2.",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "check": "node --check src/index.js && node --check src/ticketPanel.js && node --check src/ticketHandler.js && node --check src/transcript.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.19.3",
+    "dotenv": "^17.4.2"
+  }
+}
