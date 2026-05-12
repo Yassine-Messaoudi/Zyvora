@@ -4,14 +4,19 @@ const LOGO_URL = "https://res.cloudinary.com/db4mpxc2k/image/upload/v1778619521/
 
 function getTransport() {
   if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) return null;
+  const port = Number(process.env.SMTP_PORT || 587);
   return nodemailer.createTransport({
     host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: Number(process.env.SMTP_PORT || 587) === 465,
+    port,
+    secure: port === 465,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS
-    }
+    },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
+    tls: { rejectUnauthorized: false }
   });
 }
 
@@ -63,16 +68,8 @@ export async function sendVerificationEmail(email, code) {
 }
 
 export async function sendDeliveryEmail(invoice, order) {
-  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) return false;
-  const transport = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: Number(process.env.SMTP_PORT || 587) === 465,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
-    }
-  });
+  const transport = getTransport();
+  if (!transport) return false;
   const deliveryItems = Array.isArray(order.deliveryItems)
     ? (typeof order.deliveryItems[0] === "string" ? JSON.parse(order.deliveryItems) : order.deliveryItems)
     : [];
