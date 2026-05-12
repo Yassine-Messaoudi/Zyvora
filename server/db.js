@@ -9,7 +9,7 @@ export function getPool() {
       port: Number(process.env.DB_PORT || 3306),
       user: process.env.DB_USER || "root",
       password: process.env.DB_PASSWORD || "",
-      database: process.env.DB_NAME || "zyvora",
+      database: process.env.DB_NAME || "zyvory",
       waitForConnections: true,
       connectionLimit: 10,
       queueLimit: 0,
@@ -45,6 +45,7 @@ export async function initDatabase() {
       id INT AUTO_INCREMENT PRIMARY KEY,
       name VARCHAR(255) NOT NULL UNIQUE,
       image LONGTEXT DEFAULT NULL,
+      tag VARCHAR(255) DEFAULT NULL,
       sort_order INT DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
@@ -52,6 +53,8 @@ export async function initDatabase() {
 
   // Migrate existing VARCHAR columns to LONGTEXT for base64 images
   await db.execute(`ALTER TABLE categories MODIFY COLUMN image LONGTEXT DEFAULT NULL`).catch(() => {});
+  // Add tag column if missing
+  await db.execute(`ALTER TABLE categories ADD COLUMN tag VARCHAR(255) DEFAULT NULL`).catch(() => {});
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS products (
@@ -203,8 +206,8 @@ export async function initDatabase() {
   const [settingsRows] = await db.execute("SELECT COUNT(*) as cnt FROM settings");
   if (settingsRows[0].cnt === 0) {
     const defaults = [
-      ["storeName", process.env.STORE_NAME || "Zyvora Market"],
-      ["discordInvite", process.env.DISCORD_INVITE || "https://discord.gg/your-server"],
+      ["storeName", process.env.STORE_NAME || "Zyvory Market"],
+      ["discordInvite", process.env.DISCORD_INVITE || "https://discord.gg/Zhd6unzQGm"],
       ["walletAddresses", JSON.stringify({
         LTC: process.env.LTC_ADDRESS || "",
         BTC: process.env.BTC_ADDRESS || "",

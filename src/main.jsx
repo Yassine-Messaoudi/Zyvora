@@ -7,6 +7,7 @@ import {
   BarChart3,
   Boxes,
   Car,
+  ChevronDown,
   CheckCircle2,
   Code2,
   Copy,
@@ -42,22 +43,28 @@ import {
   Wrench,
   X,
   Zap,
-  Image
+  Image,
+  Pickaxe,
+  Crosshair,
+  Globe,
+  Target
 } from "lucide-react";
 import {
   siCounterstrike,
+  siDiscord,
   siFivem,
   siFortnite,
   siRoblox,
-  siRust,
+
   siSupercell,
+  siUbisoft,
   siValorant
 } from "simple-icons";
 import "./styles.css";
 
 const API = "/api";
-const CART_KEY = "zyvora-cart";
-const ADMIN_TOKEN_KEY = "zyvora-admin-token";
+const CART_KEY = "zyvory-cart";
+const ADMIN_TOKEN_KEY = "zyvory-admin-token";
 
 const CartContext = createContext(null);
 const CurrencyContext = createContext(null);
@@ -72,14 +79,14 @@ const CURRENCIES = [
 ];
 
 function CurrencyProvider({ children }) {
-  const [currency, setCurrency] = useState(() => localStorage.getItem("zyvora-currency") || "EUR");
+  const [currency, setCurrency] = useState(() => localStorage.getItem("zyvory-currency") || "EUR");
   const [rates, setRates] = useState({});
   useEffect(() => {
     api("/prices").then((data) => {
       if (data && data.fiatRates) setRates(data.fiatRates);
     }).catch(() => {});
   }, []);
-  useEffect(() => localStorage.setItem("zyvora-currency", currency), [currency]);
+  useEffect(() => localStorage.setItem("zyvory-currency", currency), [currency]);
   const convert = (eurValue) => {
     if (currency === "EUR") return eurValue || 0;
     const key = `eurTo${currency.toLowerCase()}`;
@@ -199,24 +206,44 @@ const categoryIcons = {
 };
 
 const browseCategories = [
-  { name: "Accounts", category: "Accounts", icon: UserCircle },
-  { name: "Scripts", category: "Scripts", icon: Code2 },
-  { name: "Games", category: "Games", icon: Gamepad2 },
-  { name: "Tools", category: "Tools", icon: Wrench },
-  { name: "Methods", category: "Methods", icon: KeyRound },
-  { name: "Boosting", category: "Boosting", icon: Rocket },
-  { name: "VPN", category: "VPN", icon: Shield },
-  { name: "FiveM", category: "FiveM", brand: siFivem },
-  { name: "Counter-Strike 2", category: "Games", brand: siCounterstrike },
-  { name: "Valorant", category: "Games", brand: siValorant },
-  { name: "Fortnite", category: "Games", brand: siFortnite },
-  { name: "Roblox", category: "Games", brand: siRoblox },
-  { name: "Rust", category: "Games", brand: siRust },
-  { name: "Supercell", category: "Games", brand: siSupercell },
-  { name: "Maps", category: "Maps", icon: Map },
-  { name: "Vehicles", category: "Vehicles", icon: Car },
-  { name: "EUP", category: "EUP", icon: Shirt },
-  { name: "Other", category: "Other", icon: Boxes }
+  { name: "Accounts", category: "Accounts", icon: UserCircle, color: "#6366f1" },
+  { name: "Social", category: "Social", icon: UserCircle, color: "#ec4899" },
+  { name: "Games", category: "Games", icon: Gamepad2, color: "#22d3ee" },
+  { name: "Generators", category: "Generators", icon: Monitor, color: "#a78bfa" },
+  { name: "Methods", category: "Methods", icon: KeyRound, color: "#f59e0b" },
+  { name: "Spoofers", category: "Spoofers", icon: Shield, color: "#ef4444" },
+  { name: "VPN", category: "VPN", icon: Globe, color: "#10b981" },
+  { name: "Boosting", category: "Boosting", icon: Rocket, color: "#F8FBFF" },
+  { name: "FiveM", category: "FiveM", brand: siFivem, color: "#F40552" },
+  { name: "Counter-Strike 2", category: "Games", brand: siCounterstrike, color: "#DE9B35" },
+  { name: "Valorant", category: "Games", brand: siValorant, color: "#FF4655" },
+  { name: "Rainbow Six Siege", category: "Games", brand: siUbisoft, color: "#F8FBFF" },
+  { name: "Fortnite", category: "Games", brand: siFortnite, color: "#00AFF0" },
+  { name: "Minecraft", category: "Games", icon: Pickaxe, color: "#62B47A" },
+  { name: "Roblox", category: "Games", brand: siRoblox, color: "#E2231A" },
+  { name: "Rust", category: "Games", icon: Crosshair, color: "#CE412B" },
+  { name: "Supercell", category: "Games", brand: siSupercell, color: "#5BC500" }
+];
+
+const marketplaceStats = [
+  { value: "400K+", label: "Products Sold" },
+  { value: "30K+", label: "Satisfied Customers" },
+  { value: "4.98", label: "Average Rating" }
+];
+
+const buyerReviews = [
+  { id: "seed-1", name: "M. Al", language: "EN", productName: "ChatGPT Plus", rating: 5, time: "18h ago", text: "Got the account fast, dashboard showed the details right away. smooth checkout." },
+  { id: "seed-2", name: "Y. Ben", language: "AR", productName: "Valorant Access", rating: 5, time: "1d ago", text: "وصل الطلب بسرعة، كل البيانات كانت واضحة والدعم رد لما سألت." },
+  { id: "seed-3", name: "Lina M.", language: "FR", productName: "NordVPN Lifetime", rating: 5, time: "1d ago", text: "Commande recue direct. Le lien marche bien, rien a redire pour le prix." },
+  { id: "seed-4", name: "S. Lopez", language: "ES", productName: "CS2 Prime Account", rating: 5, time: "2d ago", text: "Todo ok, la cuenta llego con los datos correctos. Confirmacion un poco lenta pero bien." },
+  { id: "seed-5", name: "T. Muller", language: "DE", productName: "Spotify Premium", rating: 4, time: "2d ago", text: "Hat funktioniert. Lieferung war schnell, nur die Zahlung hat paar Minuten gebraucht." },
+  { id: "seed-6", name: "Kaan T.", language: "TR", productName: "Fortnite Account Gen", rating: 5, time: "3d ago", text: "Hesap geldi, mail bilgileri dogruydu. support iyi, tekrar alirim." },
+  { id: "seed-7", name: "R. Silva", language: "PT", productName: "Netflix Lifetime", rating: 5, time: "3d ago", text: "Recebi o login certinho, sem enrolacao. painel simples de ver depois." },
+  { id: "seed-8", name: "A. Nasser", language: "AR", productName: "FiveM Tools", rating: 4, time: "4d ago", text: "الملفات اشتغلت، احتجت اسأل عن التثبيت والدعم ساعدني." },
+  { id: "seed-9", name: "Noah W.", language: "EN", productName: "FiveM Pack", rating: 5, time: "5d ago", text: "Pack worked after install. docs could be clearer tho, but delivery was instant." },
+  { id: "seed-10", name: "D. Ivan", language: "RU", productName: "CS2 Prime", rating: 5, time: "5d ago", text: "ключ пришел быстро, проверил в кабинете, все нормально." },
+  { id: "seed-11", name: "H. Chen", language: "EN", productName: "ChatGPT Accounts", rating: 5, time: "6d ago", text: "No weird login issue. got mail + pass, changed it and it stayed fine." },
+  { id: "seed-12", name: "O. R.", language: "FR", productName: "Roblox Robux", rating: 4, time: "1w ago", text: "Service propre, pas fake. J'ai attendu un peu mais tout est arrive." }
 ];
 
 
@@ -247,35 +274,32 @@ function CurrencySelector() {
 }
 
 function Shell({ children }) {
+  const { pathname } = useRouteContext();
   const [open, setOpen] = useState(false);
+  const [cartOpen, setCartOpen] = useState(false);
   const cart = useCart();
   const nav = [
     ["/", "Home"],
     ["/products", "Products"],
-    ["/#reviews", "Reviews"],
-    ["https://discord.gg/your-server", "Discord"],
-    ["/cart", "Cart"],
-    ["/dashboard", "Dashboard"]
+    ["/#reviews", "Reviews"]
   ];
+  if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) {
+    return <>{children}</>;
+  }
   return (
     <div className="min-h-screen bg-[#02070D] text-[#F5FAFF]">
-      <div className="announcement">
-        <span>Discord restock alerts live now</span>
-        <span className="announcement-dot" />
-        <span>New crypto checkout invoices expire in 15 minutes</span>
-      </div>
       <header className="site-header">
         <div className="site-nav">
           <Link href="/" className="brand-lockup">
             <span className="brand-mark">
-              <img src="/images/zyvola-logo.png" alt="ZYVORA logo" />
+              <img src="/images/zyvola-logo.png" alt="Zyvory logo" />
             </span>
             <span>
-              <span className="brand-name">ZYVORA</span>
+              <span className="brand-name">Zyvory</span>
               <span className="brand-subtitle">Digital Market</span>
             </span>
           </Link>
-          <nav className="hidden items-center gap-2 lg:flex">
+          <nav className="hidden items-center gap-7 lg:flex">
             {nav.map(([href, label]) =>
               href.startsWith("http") ? (
                 <a key={href} href={href} className="nav-link">
@@ -287,7 +311,17 @@ function Shell({ children }) {
                 </Link>
               )
             )}
-            <CurrencySelector />
+            <a href="https://discord.gg/PKWwqG8uYB" className="discord-nav-link" aria-label="Join Discord">
+              <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true" fill="currentColor">
+                <path d={siDiscord.path} />
+              </svg>
+            </a>
+            <button type="button" className="cart-nav-link" onClick={() => setCartOpen(true)}>
+              <ShoppingCart className="h-4 w-4" /> Cart
+            </button>
+            <a href="/dashboard" target="_blank" rel="noopener noreferrer" className="dashboard-link">
+              <ExternalLink className="h-4 w-4" /> Dashboard
+            </a>
           </nav>
           <div className="flex items-center gap-2 lg:hidden">
             <CurrencySelector />
@@ -318,12 +352,84 @@ function Shell({ children }) {
                   </Link>
                 )
               )}
+              <a href="https://discord.gg/PKWwqG8uYB" className="mobile-link">
+                Discord
+              </a>
+              <button type="button" className="mobile-link" onClick={() => { setOpen(false); setCartOpen(true); }}>
+                Cart ({cart.count})
+              </button>
+              <a href="/dashboard" target="_blank" rel="noopener noreferrer" className="mobile-link" onClick={() => setOpen(false)}>
+                Dashboard
+              </a>
             </div>
           </div>
         </div>
       )}
-      <main>{children}</main>
+      {cartOpen && <CartDrawer cart={cart} onClose={() => setCartOpen(false)} />}
+      <main className="site-main">{children}</main>
       <Footer />
+    </div>
+  );
+}
+
+function CartDrawer({ cart, onClose }) {
+  const hasItems = cart.items.length > 0;
+  return (
+    <div className="cart-drawer-layer" role="dialog" aria-modal="true" aria-label="Cart">
+      <button className="cart-drawer-backdrop" type="button" onClick={onClose} aria-label="Close cart" />
+      <aside className="cart-drawer">
+        <div className="cart-drawer-head">
+          <h2>Cart</h2>
+          <button type="button" onClick={onClose} aria-label="Close cart">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="cart-drawer-body">
+          {hasItems ? (
+            <div className="cart-drawer-items">
+              {cart.items.map((item) => (
+                <div className="cart-drawer-item" key={item.productId}>
+                  {item.image ? <img src={item.image} alt={item.name} /> : <span className="cart-drawer-img-fallback"><Package className="h-5 w-5" /></span>}
+                  <div className="cart-drawer-info">
+                    <strong>{item.name}</strong>
+                    <span><Money value={item.price} /></span>
+                    <div className="cart-drawer-qty">
+                      <button type="button" onClick={() => cart.update(item.productId, item.quantity - 1)} aria-label={`Decrease ${item.name}`}>
+                        <Minus className="h-3.5 w-3.5" />
+                      </button>
+                      <span>{item.quantity}</span>
+                      <button type="button" onClick={() => cart.update(item.productId, item.quantity + 1)} aria-label={`Increase ${item.name}`}>
+                        <Plus className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                  <button className="cart-drawer-remove" type="button" onClick={() => cart.remove(item.productId)} aria-label={`Remove ${item.name}`}>
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="cart-drawer-empty">Your cart is empty.</p>
+          )}
+        </div>
+        <div className="cart-drawer-footer">
+          <div className="cart-drawer-row">
+            <span>Items</span>
+            <strong>{cart.count}</strong>
+          </div>
+          <div className="cart-drawer-row">
+            <span>Total</span>
+            <strong><Money value={cart.total} /></strong>
+          </div>
+          <Link href="/checkout" className={`cart-drawer-checkout${hasItems ? "" : " disabled"}`} onClick={onClose}>
+            Checkout
+          </Link>
+          <button type="button" className="cart-drawer-clear" onClick={cart.clear} disabled={!hasItems}>
+            Clear cart
+          </button>
+        </div>
+      </aside>
     </div>
   );
 }
@@ -357,9 +463,9 @@ function HomePage() {
   return (
     <main className="landing-page">
       <HeroSection />
-      <StatsRow />
-      <TrustCards />
+      <MovingHighlights />
       <CategoriesSection />
+      <MarketplaceStatsSection />
       <ReviewsSection reviews={reviews} />
       <FaqSection />
     </main>
@@ -371,24 +477,37 @@ function HeroSection() {
     <section className="zy-hero">
       <div className="hero-bg-image" aria-hidden="true" />
       <div className="hero-bg-overlay" aria-hidden="true" />
+      <div className="hero-orb-2" aria-hidden="true" />
+      <div className="hero-particles" aria-hidden="true">
+        <div className="hero-particle" />
+        <div className="hero-particle" />
+        <div className="hero-particle" />
+        <div className="hero-particle" />
+        <div className="hero-particle" />
+        <div className="hero-particle" />
+        <div className="hero-particle" />
+        <div className="hero-particle" />
+      </div>
       <div className="zy-hero-shell">
-        <motion.div className="zy-hero-copy" initial={{ opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55 }}>
+        <motion.div className="zy-hero-copy" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: "easeOut" }}>
           <div className="eyebrow-badge">
-            <ShieldCheck className="h-4 w-4" /> Verified digital marketplace
+            <ShieldCheck className="h-4 w-4" /> Zyvory verified market
           </div>
           <h1>
-            Premium digital products.
+            Digital products for gamers.
             <span>Instant delivery.</span>
           </h1>
           <p className="hero-lede">
-            A cleaner marketplace for accounts, keys, scripts, tools, and private links with verified stock, crypto invoices, and instant dashboard access.
+            Accounts, keys, scripts, tools, boosts, and private links with verified stock, crypto checkout, and clean customer delivery logs.
           </p>
           <div className="hero-actions">
             <Link href="/products" className="primary-btn">
               <Package className="h-5 w-5" /> Browse Products
             </Link>
-            <a href="https://discord.gg/your-server" className="secondary-btn">
-              <MessageCircle className="h-5 w-5" /> Join Discord
+            <a href="https://discord.gg/Zhd6unzQGm" className="secondary-btn discord-hero-btn" aria-label="Join Discord">
+              <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true" fill="currentColor">
+                <path d={siDiscord.path} />
+              </svg>
             </a>
           </div>
           <div className="hero-trust-row">
@@ -396,34 +515,10 @@ function HeroSection() {
             <span><Zap className="h-4 w-4" /> Instant delivery</span>
             <span><Wallet className="h-4 w-4" /> LTC / BTC / SOL / ETH</span>
           </div>
-        </motion.div>
-        <motion.div className="hero-market-card" initial={{ opacity: 0, y: 24, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.65, delay: 0.08 }}>
-          <div className="hero-market-top">
-            <span className="live-dot" />
-            <strong>ZYVORA LIVE STOCK</strong>
-            <span>Updated now</span>
-          </div>
-          <div className="hero-character-window">
-            <img src="/images/hero-reference-characters.png" alt="Zyvora digital marketplace squad" />
-            <div className="hero-price-chip"><BadgeDollarSign className="h-4 w-4" /> From $4.99</div>
-          </div>
-          <div className="hero-market-list">
-            {[
-              ["ChatGPT Accounts", "Accounts", "In stock"],
-              ["FiveM Tools", "Scripts", "Instant"],
-              ["Valorant Access", "Games", "Verified"]
-            ].map(([name, type, status]) => (
-              <div className="hero-market-row" key={name}>
-                <span><Package className="h-4 w-4" /></span>
-                <div><strong>{name}</strong><small>{type}</small></div>
-                <em>{status}</em>
-              </div>
-            ))}
-          </div>
-          <div className="hero-payment-strip">
-            <span>15m invoice</span>
-            <span>Auto delivery</span>
-            <span>Dashboard logs</span>
+          <div className="hero-glass-strip" aria-label="Marketplace highlights">
+            <span><Package className="h-4 w-4" /> Accounts</span>
+            <span><Code2 className="h-4 w-4" /> Scripts</span>
+            <span><BadgeDollarSign className="h-4 w-4" /> From €0.99</span>
           </div>
         </motion.div>
       </div>
@@ -458,6 +553,42 @@ function TrustCards() {
   );
 }
 
+function MovingHighlights() {
+  const highlights = [
+    { type: "metric", value: "4", label: "Crypto rails", text: "LTC, BTC, SOL, ETH invoice flows." },
+    { type: "metric", value: "15m", label: "Invoice windows", text: "Clean countdown status tracking." },
+    { type: "metric", value: "24/7", label: "Delivery logs", text: "Keys and files stay visible." },
+    { type: "feature", icon: ShieldCheck, label: "Guaranteed Quality", text: "Curated stock controls." },
+    { type: "feature", icon: Zap, label: "Instant Delivery", text: "Unlocks after confirmation." },
+    { type: "feature", icon: Headphones, label: "Live Support", text: "Discord support routing." }
+  ];
+
+  return (
+    <section className="moving-highlights" aria-label="Store highlights">
+      <div className="moving-highlights-fade left" aria-hidden="true" />
+      <div className="moving-highlights-fade right" aria-hidden="true" />
+      <div className="moving-highlights-track">
+        {[...highlights, ...highlights].map((item, index) => {
+          const Icon = item.icon;
+          return (
+            <div className="moving-highlight-card" key={`${item.label}-${index}`} aria-hidden={index >= highlights.length ? "true" : undefined}>
+              {item.type === "metric" ? (
+                <strong>{item.value}</strong>
+              ) : (
+                <span className="moving-highlight-icon"><Icon className="h-4 w-4" /></span>
+              )}
+              <div>
+                <p>{item.label}</p>
+                <small>{item.text}</small>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function CategoriesSection() {
   return (
     <section className="section-band landing-section">
@@ -466,10 +597,11 @@ function CategoriesSection() {
         <div className="zy-category-grid mt-8">
           {browseCategories.map((item) => {
             const Icon = item.icon || categoryIcons[item.category] || Boxes;
+            const c = item.color || "#6366f1";
             return (
-              <motion.div key={item.name} whileHover={{ y: -6, scale: 1.01 }} transition={{ duration: 0.18 }}>
-                <Link href={`/products?category=${encodeURIComponent(item.category)}`} className="zy-category-card">
-                  <span className={item.brand ? "category-logo brand-logo" : "category-logo"}>
+              <motion.div key={item.name} whileHover={{ y: -6, scale: 1.02 }} transition={{ duration: 0.22 }}>
+                <Link href={`/products?filter=${encodeURIComponent(item.name)}`} className="zy-category-card" style={{"--cat-color": c}}>
+                  <span className={item.brand ? "category-logo brand-logo" : "category-logo"} style={{color: c, filter: `drop-shadow(0 0 12px ${c}40)`}}>
                     {item.brand ? <BrandIcon icon={item.brand} /> : <Icon className="h-11 w-11" strokeWidth={2.15} />}
                   </span>
                   <span>{item.name}</span>
@@ -483,35 +615,82 @@ function CategoriesSection() {
   );
 }
 
+function MarketplaceStatsSection() {
+  return (
+    <section className="marketplace-stats-section" aria-label="Marketplace statistics">
+      <div className="marketplace-stats-bg" aria-hidden="true" />
+      <div className="container-shell marketplace-stats-grid">
+        {marketplaceStats.map((stat) => (
+          <motion.div
+            className="marketplace-stat"
+            key={stat.label}
+            initial={{ opacity: 0, y: 18 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.35 }}
+            transition={{ duration: 0.45 }}
+          >
+            <strong>{stat.value}</strong>
+            <span>{stat.label}</span>
+          </motion.div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function ReviewsSection({ reviews }) {
+  const liveReviews = reviews.map((review) => ({
+    ...review,
+    language: review.language || "BUYER",
+    time: review.time || "recent"
+  }));
+  const displayReviews = [...liveReviews, ...buyerReviews].slice(0, 12);
+  const reviewRows = [
+    displayReviews.slice(0, 6),
+    displayReviews.slice(4, 10),
+    [...displayReviews.slice(8, 12), ...displayReviews.slice(0, 2)]
+  ].filter((row) => row.length);
+
   return (
     <section id="reviews" className="section-band landing-section">
-      <div className="container-shell">
-        <SectionHeading eyebrow="Trust" title="Purchase Reviews" text="Only approved purchase-based reviews appear here, keeping the store credible." />
-        {reviews.length ? (
-          <div className="review-grid mt-8">
-            {reviews.slice(0, 3).map((review) => (
-              <motion.div className="review-card premium-hover" key={review.id} whileHover={{ y: -5 }}>
-                <Stars rating={review.rating} />
-                <p className="mt-4 text-slate-200">{review.text}</p>
-                <div className="mt-5 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-bold text-cyan-100">{review.name || "Verified customer"}</p>
-                    {review.productName && <p className="mt-1 text-xs text-slate-500">{review.productName}</p>}
-                  </div>
-                  <span className="verified-pill">Verified purchase</span>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        ) : (
+      <div className="container-shell reviews-heading-shell">
+        <SectionHeading eyebrow="Customer Reviews" title="Hear from our buyers" text="Short buyer notes from different regions, products, and delivery types." />
+      </div>
+      {displayReviews.length ? (
+        <div className="review-marquee-wall mt-8" aria-label="Customer review carousel">
+          {reviewRows.map((row, rowIndex) => (
+            <div className={`review-marquee-row row-${rowIndex + 1}`} key={`review-row-${rowIndex}`}>
+              <div className="review-marquee-track">
+                {[...row, ...row].map((review, index) => (
+                  <motion.div className="review-card buyer-review-card premium-hover" key={`${review.id}-${rowIndex}-${index}`} whileHover={{ y: -5 }}>
+                    <Stars rating={review.rating} />
+                    <p className="review-copy">{review.text}</p>
+                    <div className="review-footer">
+                      <div>
+                        <p>{review.name || "Verified buyer"}</p>
+                        {review.productName && <small>{review.productName}</small>}
+                      </div>
+                      <div className="review-tags">
+                        <span>{review.language}</span>
+                        <span>{review.time}</span>
+                      </div>
+                    </div>
+                    <span className="verified-pill review-verified">Verified purchase</span>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="container-shell">
           <div className="review-empty-state mt-8">
             <div className="empty-icon"><Star className="h-7 w-7" /></div>
             <h3>No public reviews yet</h3>
             <p>Verified purchase reviews will appear here after approval.</p>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -606,7 +785,8 @@ function ProductsPage() {
   const [categories, setCategories] = useState([]);
   const [search, setSearch] = useState("");
   const [openCat, setOpenCat] = useState(null);
-  const [activePill, setActivePill] = useState("");
+  const urlFilter = new URLSearchParams(window.location.search).get("filter") || "";
+  const [activePill, setActivePill] = useState(urlFilter);
   const cart = useCart();
 
   useEffect(() => {
@@ -638,15 +818,19 @@ function ProductsPage() {
   });
 
   const filteredCats = activePill
-    ? catData.filter((c) => c.name === activePill)
+    ? catData.filter((c) => c.tag === activePill || c.name === activePill)
     : search
       ? catData.filter((c) => c.name.toLowerCase().includes(search.toLowerCase()) || c.items.some((p) => p.name.toLowerCase().includes(search.toLowerCase())))
       : catData;
 
   const modalProducts = openCat ? (grouped[openCat] || []) : [];
 
+  // Build unique browse filter names from browseCategories
+  const filterPills = browseCategories.map((bc) => bc.name);
+
   return (
-    <section className="mx-auto max-w-7xl px-4 py-12">
+    <div className="products-page">
+      <section className="mx-auto max-w-7xl px-4 py-12" style={{position:'relative',zIndex:1}}>
       <div className="product-filter-panel">
         <div className="products-search-bar">
           <span>Keyword</span>
@@ -659,8 +843,8 @@ function ProductsPage() {
           <span>Category</span>
           <div className="category-pills">
             <button className={`cat-pill ${activePill === "" ? "active" : ""}`} onClick={() => { setActivePill(""); setSearch(""); }}>All</button>
-            {catData.map((c) => (
-              <button key={c.name} className={`cat-pill ${activePill === c.name ? "active" : ""}`} onClick={() => { setActivePill(c.name); setSearch(""); }}>{c.name}</button>
+            {filterPills.map((name) => (
+              <button key={name} className={`cat-pill ${activePill === name ? "active" : ""}`} onClick={() => { setActivePill(name); setSearch(""); }}>{name}</button>
             ))}
           </div>
         </div>
@@ -720,6 +904,7 @@ function ProductsPage() {
         </div>
       )}
     </section>
+    </div>
   );
 }
 
@@ -971,9 +1156,9 @@ function CheckoutPage() {
       <form className="mt-8 grid gap-6 lg:grid-cols-[340px_1fr]" onSubmit={submit}>
         <aside className="co-sidebar">
           <div className="co-sidebar-head">
-            <div className="co-logo-row"><Zap className="h-5 w-5 text-blue-300" /><span className="font-bold text-white">ZYVORA</span></div>
+            <div className="co-logo-row"><Zap className="h-5 w-5 text-blue-300" /><span className="font-bold text-white">Zyvory</span></div>
           </div>
-          <p className="co-pay-label">PAY ZYVORA</p>
+          <p className="co-pay-label">PAY Zyvory</p>
           <p className="co-total"><Money value={cart.total} /></p>
           <div className="co-items">
             {cart.items.map((item) => (
@@ -1039,11 +1224,11 @@ function CheckoutPage() {
           </div>
           <label className="co-check">
             <input required type="checkbox" checked={form.agreedToTerms} onChange={(e) => setForm({ ...form, agreedToTerms: e.target.checked })} />
-            <span>I have read and agree to Zyvora's Terms of Service.</span>
+            <span>I have read and agree to Zyvory's Terms of Service.</span>
           </label>
           <label className="co-check">
             <input type="checkbox" checked={form.newsletter} onChange={(e) => setForm({ ...form, newsletter: e.target.checked })} />
-            <span>I would like to receive updates and promotions from Zyvora.</span>
+            <span>I would like to receive updates and promotions from Zyvory.</span>
           </label>
           {error && <div className="error-box mt-2">{error}</div>}
           <button className="co-proceed-btn" disabled={loading}>
@@ -1062,7 +1247,7 @@ async function downloadInvoicePdf(invoice) {
   let y = 20;
   doc.setFontSize(22);
   doc.setFont("helvetica", "bold");
-  doc.text("ZYVORA", 14, y);
+  doc.text("Zyvory", 14, y);
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
   doc.text("Digital Market", 14, y + 6);
@@ -1116,7 +1301,7 @@ async function downloadInvoicePdf(invoice) {
   doc.setFont("helvetica", "normal");
   doc.setTextColor(120);
   doc.text("Thank you for your purchase. For support, open a ticket on our Discord server.", 14, y);
-  doc.save(`ZYVORA-Invoice-${invoice.id}.pdf`);
+  doc.save(`Zyvory-Invoice-${invoice.id}.pdf`);
 }
 
 function InvoicePage({ invoiceId }) {
@@ -1302,6 +1487,10 @@ function DashboardPage() {
   const load = async (event) => {
     event?.preventDefault();
     setError("");
+    if (!lookup.email.trim() && !lookup.invoiceId.trim()) {
+      setError("Enter your email address to continue.");
+      return;
+    }
     try {
       const params = new URLSearchParams();
       if (lookup.email) params.set("email", lookup.email);
@@ -1315,42 +1504,84 @@ function DashboardPage() {
     if (lookup.email || lookup.invoiceId) load();
   }, []);
   return (
-    <section className="mx-auto max-w-6xl px-4 py-12">
-      <SectionHeading eyebrow="Customer" title="Dashboard" />
-      <form className="lookup-bar mt-8" onSubmit={load}>
-        <input value={lookup.email} onChange={(event) => setLookup({ ...lookup, email: event.target.value })} placeholder="Email address" />
-        <input value={lookup.invoiceId} onChange={(event) => setLookup({ ...lookup, invoiceId: event.target.value })} placeholder="Invoice ID" />
-        <button className="primary-btn">Access</button>
-      </form>
-      {error && <div className="error-box mt-4">{error}</div>}
-      {data && (
-        <div className="mt-8 grid gap-6 lg:grid-cols-[320px_1fr]">
-          <aside className="summary-panel">
-            <UserCircle className="h-8 w-8 text-blue-300" />
-            <p className="mt-4 text-white">{data.customer.email || "Invoice access"}</p>
-            <p className="mt-1 text-sm text-slate-400">Balance</p>
-            <p className="text-3xl font-black text-white">{money(data.customer.balance || 0)}</p>
-            <Link href="/support" className="secondary-btn mt-6 w-full justify-center">
-              Support Ticket
-            </Link>
-          </aside>
-          <div className="grid gap-6">
-            <DashboardBlock title="Orders" icon={Package}>
-              {(data.orders || []).length ? (data.orders || []).map((order) => <OrderCard order={order} key={order.id} />) : <p className="text-slate-400">No completed orders found.</p>}
-            </DashboardBlock>
-            <DashboardBlock title="Invoices" icon={Wallet}>
-              {(data.invoices || []).map((invoice) => (
-                <div className="table-row" key={invoice.id}>
-                  <span>{invoice.id}</span>
-                  <span>{invoice.status}</span>
-                  <span>{money(invoice.totalUsd)}</span>
-                </div>
-              ))}
-            </DashboardBlock>
+    <section className="customer-auth-page">
+      <div className="customer-auth-topbar">
+        <Link href="/" className="customer-back-link">
+          <span>←</span> Back to store
+        </Link>
+        <label className="customer-language-wrap" aria-label="Language">
+          <UsFlagIcon />
+          <select className="customer-language" defaultValue="English">
+            <option>English</option>
+          </select>
+        </label>
+      </div>
+      <div className="customer-auth-center">
+        <img className="customer-auth-logo" src="/images/zyvola-logo.png" alt="Zyvory logo" />
+        {!data ? (
+          <form className="customer-auth-card" onSubmit={load}>
+            <h1>Welcome back</h1>
+            <p>Enter your email to view your orders, invoices, downloads, and support.</p>
+            <label>
+              <span>Email address <b>*</b></span>
+              <input
+                required
+                type="email"
+                value={lookup.email}
+                onChange={(event) => setLookup({ ...lookup, email: event.target.value })}
+                placeholder="user@example.com"
+              />
+            </label>
+            {error && <div className="customer-auth-error">{error}</div>}
+            <button type="submit">
+              Next <span>›</span>
+            </button>
+          </form>
+        ) : (
+          <div className="customer-dashboard-panel">
+            <aside className="customer-summary-card">
+              <UserCircle className="h-8 w-8 text-blue-300" />
+              <p>{data.customer.email || lookup.email || "Customer"}</p>
+              <span>Balance</span>
+              <strong>{money(data.customer.balance || 0)}</strong>
+              <button type="button" onClick={() => setData(null)}>Use another email</button>
+            </aside>
+            <div className="customer-dashboard-stack">
+              <DashboardBlock title="Orders" icon={Package}>
+                {(data.orders || []).length ? (data.orders || []).map((order) => <OrderCard order={order} key={order.id} />) : <p className="text-slate-400">No completed orders found.</p>}
+              </DashboardBlock>
+              <DashboardBlock title="Invoices" icon={Wallet}>
+                {(data.invoices || []).length ? (data.invoices || []).map((invoice) => (
+                  <div className="table-row" key={invoice.id}>
+                    <span>{invoice.id}</span>
+                    <span>{invoice.status}</span>
+                    <span>{money(invoice.totalUsd)}</span>
+                  </div>
+                )) : <p className="text-slate-400">No invoices found.</p>}
+              </DashboardBlock>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+        <p className="customer-auth-copy">© 2026 Zyvory. All rights reserved.</p>
+      </div>
     </section>
+  );
+}
+
+function UsFlagIcon() {
+  return (
+    <svg className="customer-language-flag" viewBox="0 0 7410 3900" aria-hidden="true">
+      <path fill="#b22234" d="M0 0h7410v3900H0z" />
+      <path stroke="#fff" strokeWidth="300" d="M0 450h7410M0 1050h7410M0 1650h7410M0 2250h7410M0 2850h7410M0 3450h7410" />
+      <path fill="#3c3b6e" d="M0 0h2964v2100H0z" />
+      <g fill="#fff">
+        {Array.from({ length: 9 }).map((_, row) =>
+          Array.from({ length: row % 2 === 0 ? 6 : 5 }).map((__, col) => (
+            <circle key={`${row}-${col}`} cx={247 + col * 494 + (row % 2 ? 247 : 0)} cy={210 + row * 210} r="55" />
+          ))
+        )}
+      </g>
+    </svg>
   );
 }
 
@@ -1441,7 +1672,7 @@ function AdminPage({ section }) {
         <div className="admin-login-card">
           <span className="admin-login-icon"><Lock className="h-6 w-6" /></span>
           <p className="admin-kicker">Secure admin access</p>
-          <h1>ZYVORA Control Center</h1>
+          <h1>Zyvory Control Center</h1>
           <p>Sign in to manage products, invoices, orders, delivery stock, and payment settings.</p>
           <form className="mt-6 grid gap-4" onSubmit={signIn}>
             <label className="field">
@@ -1534,8 +1765,8 @@ function AdminLayout({ section, children, onSignOut }) {
       <aside className={`admin-sidebar ${drawer ? "open" : ""}`}>
         <div className="admin-sidebar-head">
           <Link href="/" className="brand-lockup">
-            <span className="brand-mark"><img src="/images/zyvola-logo.png" alt="ZYVORA logo" /></span>
-            <span><span className="brand-name">ZYVORA</span><span className="brand-subtitle">Digital Market</span></span>
+            <span className="brand-mark"><img src="/images/zyvola-logo.png" alt="Zyvory logo" /></span>
+            <span><span className="brand-name">Zyvory</span><span className="brand-subtitle">Digital Market</span></span>
           </Link>
           <button className="icon-btn lg:hidden" onClick={() => setDrawer(false)}><X className="h-4 w-4" /></button>
         </div>
@@ -1834,7 +2065,7 @@ function AdminInvoices({ data, headers, onChange }) {
 function AdminSettings({ data, headers, onChange }) {
   const [tab, setTab] = useState("General");
   const [form, setForm] = useState({
-    storeName: data.storeName || "Zyvora Market",
+    storeName: data.storeName || "Zyvory Market",
     domain: data.domain || "zyvory.xyz",
     defaultCurrency: data.defaultCurrency || "EUR",
     timezone: data.timezone || "Africa/Lagos",
@@ -2152,13 +2383,14 @@ function AdminCategories({ data, headers, onChange }) {
   const categories = data.categories || [];
   const products = data.products || [];
   const [name, setName] = useState("");
+  const [tag, setTag] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [catImageFile, setCatImageFile] = useState(null);
   const [catImagePreview, setCatImagePreview] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const resetCat = () => { setEditingId(null); setName(""); setCatImageFile(null); setCatImagePreview(""); setError(""); };
+  const resetCat = () => { setEditingId(null); setName(""); setTag(""); setCatImageFile(null); setCatImagePreview(""); setError(""); };
 
   const handleCatImage = (e) => {
     const file = e.target.files[0];
@@ -2172,6 +2404,7 @@ function AdminCategories({ data, headers, onChange }) {
     try {
       const fd = new FormData();
       fd.append("name", name);
+      fd.append("tag", tag);
       if (catImageFile) fd.append("image", catImageFile);
       if (editingId) {
         await api(`/admin/categories/${editingId}`, { method: "PUT", headers, body: fd });
@@ -2215,7 +2448,14 @@ function AdminCategories({ data, headers, onChange }) {
         <form className="admin-inline-form" onSubmit={submit}>
           <label className="field">
             <span>Category name</span>
-            <input required value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Accounts" />
+            <input required value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. CS2 Prime Accounts" />
+          </label>
+          <label className="field">
+            <span>Filter tag <small style={{color: '#7e8da6', fontWeight: 400}}>(browse category)</small></span>
+            <select value={tag} onChange={(event) => setTag(event.target.value)}>
+              <option value="">— No tag —</option>
+              {browseCategories.map((bc) => <option key={bc.name} value={bc.name}>{bc.name}</option>)}
+            </select>
           </label>
           <label className="field">
             <span>Category image</span>
@@ -2249,10 +2489,11 @@ function AdminCategories({ data, headers, onChange }) {
                 {cat.image ? <img src={cat.image} alt={catName} className="h-10 w-10 rounded object-cover" /> : <div className="h-10 w-10 rounded bg-cyan-900/30 flex items-center justify-center"><Boxes className="h-5 w-5 text-slate-500" /></div>}
                 <div>
                   <strong>{catName}</strong>
+                  {cat.tag && <span className="pill" style={{marginLeft: '0.5rem', fontSize: '0.7rem'}}>{cat.tag}</span>}
                   <span>{count} product{count === 1 ? "" : "s"}</span>
                 </div>
                 <div className="admin-row-actions">
-                  <button className="small-btn" onClick={() => { setEditingId(cat.id); setName(catName); setCatImageFile(null); setCatImagePreview(cat.image || ""); setError(""); setMessage(""); }}>Edit</button>
+                <button className="small-btn" onClick={() => { setEditingId(cat.id); setName(catName); setTag(cat.tag || ""); setCatImageFile(null); setCatImagePreview(cat.image || ""); setError(""); setMessage(""); }}>Edit</button>
                   <button className="small-btn danger" onClick={() => remove(cat)}>Delete</button>
                 </div>
               </div>
@@ -2282,26 +2523,46 @@ function AdminNotice({ message, tone }) {
 
 function FaqSection() {
   const faq = [
-    ["What happens after I purchase?", "Your invoice is created, payment is monitored server-side, and eligible products are delivered automatically after confirmation."],
-    ["What payment methods do you support?", "Litecoin, Bitcoin, Solana, Ethereum, PayPal Friends & Family, and customer balance."],
-    ["How fast is delivery?", "Crypto orders unlock after the configured confirmation count. License keys, files, credentials, and private links can be delivered instantly."],
-    ["Need help?", "Use the support page or Discord support server for order help."],
-    ["Refund policy", "Digital products are final once delivered unless stock is invalid, duplicate, or cannot be replaced."],
-    ["Crypto payment confirmation time", "Times depend on chain congestion and configured confirmation requirements."]
+    { icon: "?", tone: "danger", question: "What happens after I purchase?", answer: "Your invoice is created, payment is monitored server-side, and eligible products are delivered automatically after confirmation." },
+    { icon: "▰", tone: "blue", question: "What payment methods do you support?", answer: "Litecoin, Bitcoin, Solana, Ethereum, PayPal Friends & Family, and customer balance." },
+    { icon: "⚡", tone: "orange", question: "How fast is delivery?", answer: "Crypto orders unlock after the configured confirmation count. License keys, files, credentials, and private links can be delivered instantly." },
+    { icon: "🤝", tone: "gold", question: "Need help?", answer: "Open a ticket in our support server and include your email or invoice ID so we can find your order fast." },
+    { icon: "↺", tone: "cyan", question: "Refund policy", answer: "Digital products are final once delivered unless stock is invalid, duplicate, or cannot be replaced." },
+    { icon: "⏱", tone: "purple", question: "Crypto payment confirmation time", answer: "Times depend on chain congestion and configured confirmation requirements." }
   ];
   return (
-    <section className="container-shell section-space">
-      <SectionHeading eyebrow="Help" title="FAQ" text="Clear answers for payment, delivery, support, and refund expectations." />
-      <div className="faq-grid mt-8">
-        {faq.map(([question, answer]) => (
-          <details className="faq-item premium-hover" key={question}>
-            <summary>
-              {question}
-              <Plus className="h-4 w-4" />
-            </summary>
-            <p>{answer}</p>
-          </details>
-        ))}
+    <section className="faq-showcase section-space">
+      <div className="container-shell faq-showcase-grid">
+        <motion.div className="faq-support-panel" initial={{ opacity: 0, x: -24 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.5 }}>
+          <p className="faq-eyebrow">Frequently Asked Questions</p>
+          <h2>Got a question?</h2>
+          <span>We've got answers.</span>
+          <div className="faq-character-wrap">
+            <img src="/images/IMG3.png" alt="Zyvory support characters" />
+          </div>
+          <div className="faq-support-copy">
+            <strong>Our customer support is available 24/7</strong>
+            <p>Average answer time: <span>10 minutes</span></p>
+          </div>
+          <a href="https://discord.gg/Zhd6unzQGm" className="faq-support-button">
+            <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true" fill="currentColor">
+              <path d={siDiscord.path} />
+            </svg>
+            Support Server
+          </a>
+        </motion.div>
+        <motion.div className="faq-list-panel" initial={{ opacity: 0, x: 24 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.5 }}>
+          {faq.map((item, index) => (
+            <details className="faq-item premium-hover" key={item.question} open={index === 0}>
+              <summary>
+                <span className={`faq-row-icon ${item.tone}`}>{item.icon}</span>
+                <span>{item.question}</span>
+                <ChevronDown className="h-4 w-4" />
+              </summary>
+              <p>{item.answer}</p>
+            </details>
+          ))}
+        </motion.div>
       </div>
     </section>
   );
@@ -2336,13 +2597,13 @@ function SupportPage() {
     <section className="mx-auto max-w-5xl px-4 py-12">
       <SectionHeading eyebrow="Support" title="Get Help" />
       <div className="mt-8 grid gap-4 md:grid-cols-2">
-        <a className="support-card" href="https://discord.gg/your-server">
+        <a className="support-card" href="https://discord.gg/Zhd6unzQGm">
           <MessageCircle className="h-7 w-7 text-blue-300" />
           <h3>Discord Support</h3>
           <p>Open a ticket with your invoice ID and email address.</p>
           <ExternalLink className="h-5 w-5" />
         </a>
-        <a className="support-card" href="mailto:support@zyvora.local">
+        <a className="support-card" href="mailto:support@zyvory.local">
           <Mail className="h-7 w-7 text-blue-300" />
           <h3>Email Support</h3>
           <p>Use email for delivery issues, replacement checks, and manual orders.</p>
@@ -2360,10 +2621,10 @@ function Footer() {
         <div>
           <Link href="/" className="brand-lockup">
             <span className="brand-mark">
-              <img src="/images/zyvola-logo.png" alt="ZYVORA logo" />
+              <img src="/images/zyvola-logo.png" alt="Zyvory logo" />
             </span>
             <span>
-              <span className="brand-name">ZYVORA</span>
+              <span className="brand-name">Zyvory</span>
               <span className="brand-subtitle">Digital Market</span>
             </span>
           </Link>
@@ -2375,11 +2636,11 @@ function Footer() {
           <Link href="/terms">Terms</Link>
           <Link href="/privacy">Privacy</Link>
           <Link href="/support">Support</Link>
-          <a href="https://discord.gg/your-server">Discord</a>
+          <a href="https://discord.gg/Zhd6unzQGm">Discord</a>
         </div>
       </div>
       <div className="container-shell footer-bottom">
-        <span>Copyright 2026 ZYVORA Digital Market.</span>
+        <span>Copyright 2026 Zyvory Digital Market.</span>
         <span>Secure checkout logic. Server-side payment verification.</span>
       </div>
     </footer>
@@ -2412,4 +2673,7 @@ function NotFound() {
   );
 }
 
-createRoot(document.getElementById("root")).render(<App />);
+const rootElement = document.getElementById("root");
+const appRoot = window.__zyvoryRoot || createRoot(rootElement);
+window.__zyvoryRoot = appRoot;
+appRoot.render(<App />);

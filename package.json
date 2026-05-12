@@ -1,7 +1,7 @@
 {
-  "name": "zyvora-digital-store",
+  "name": "zyvory-digital-store",
   "version": "1.0.0",
-  "description": "Zyvora - Full-stack digital products marketplace with admin dashboard, image uploads, and crypto checkout.",
+  "description": "Zyvory - Full-stack digital products marketplace with admin dashboard, image uploads, and crypto checkout.",
   "main": "index.js",
   "type": "module",
   "scripts": {

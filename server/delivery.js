@@ -21,9 +21,9 @@ export async function sendDeliveryEmail(invoice, order) {
     ""
   ]);
   await transport.sendMail({
-    from: process.env.SMTP_FROM || "orders@zyvora.local",
+    from: process.env.SMTP_FROM || "orders@zyvory.local",
     to: invoice.customerEmail,
-    subject: `Your Zyvora Market order ${order.id}`,
+    subject: `Your Zyvory Market order ${order.id}`,
     text: `Thank you for your purchase.\n\n${lines.join("\n")}`
   });
   return true;
@@ -36,7 +36,7 @@ export async function sendDiscordWebhook(event, payload) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        username: "Zyvora Market",
+        username: "Zyvory Market",
         embeds: [
           {
             title: event,

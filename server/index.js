@@ -167,7 +167,7 @@ setInterval(() => {
 
 app.get("/api/health", async (_req, res) => {
   const settings = await getSettings();
-  res.json({ ok: true, storeName: settings.storeName || "Zyvora Market", coins: supportedCoins() });
+  res.json({ ok: true, storeName: settings.storeName || "Zyvory Market", coins: supportedCoins() });
 });
 
 app.get("/api/prices", async (_req, res) => {
@@ -310,7 +310,7 @@ app.get("/api/invoices/:id", async (req, res) => {
 
 app.get("/api/settings/public", async (_req, res) => {
   const settings = await getSettings();
-  res.json({ discordInvite: settings.discordInvite || "https://discord.gg/your-server" });
+  res.json({ discordInvite: settings.discordInvite || "https://discord.gg/Zhd6unzQGm" });
 });
 
 app.get("/api/dashboard", async (req, res) => {
@@ -388,7 +388,8 @@ app.post("/api/admin/categories", auth, upload.single("image"), async (req, res)
     const name = String(req.body.name || "").trim();
     if (!name) throw new Error("Category name is required");
     const image = req.file ? fileToDataUrl(req.file) : (req.body.image || null);
-    const cat = await createCategory(name, image);
+    const tag = req.body.tag ? String(req.body.tag).trim() : null;
+    const cat = await createCategory(name, image, tag);
     res.status(201).json(cat);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -400,6 +401,7 @@ app.put("/api/admin/categories/:id", auth, upload.single("image"), async (req, r
     const id = Number(req.params.id);
     const data = {};
     if (req.body.name) data.name = req.body.name;
+    if (req.body.tag !== undefined) data.tag = req.body.tag;
     if (req.file) data.image = fileToDataUrl(req.file);
     else if (req.body.image !== undefined) data.image = req.body.image;
     const cat = await updateCategory(id, data);
@@ -507,5 +509,5 @@ if (fs.existsSync(distPath)) {
 }
 
 app.listen(port, "0.0.0.0", () => {
-  console.log(`Zyvora API listening on http://0.0.0.0:${port}`);
+  console.log(`Zyvory API listening on http://0.0.0.0:${port}`);
 });

@@ -135,10 +135,10 @@ export async function getCategoryByName(name) {
   return queryOne("SELECT * FROM categories WHERE name = ?", [name]);
 }
 
-export async function createCategory(name, image = null) {
+export async function createCategory(name, image = null, tag = null) {
   const existing = await getCategoryByName(name.trim());
   if (existing) throw new Error("Category already exists");
-  await query("INSERT INTO categories (name, image) VALUES (?, ?)", [name.trim(), image]);
+  await query("INSERT INTO categories (name, image, tag) VALUES (?, ?, ?)", [name.trim(), image, tag || null]);
   return getCategoryByName(name.trim());
 }
 
@@ -147,12 +147,13 @@ export async function updateCategory(id, data) {
   if (!cat) throw new Error("Category not found");
   const name = data.name !== undefined ? data.name.trim() : cat.name;
   const image = data.image !== undefined ? data.image : cat.image;
+  const tag = data.tag !== undefined ? (data.tag || null) : cat.tag;
   if (name !== cat.name) {
     const dup = await queryOne("SELECT id FROM categories WHERE name = ? AND id != ?", [name, id]);
     if (dup) throw new Error("Category already exists");
   }
-  await query("UPDATE categories SET name = ?, image = ? WHERE id = ?", [name, image, id]);
-  return { ...cat, name, image };
+  await query("UPDATE categories SET name = ?, image = ?, tag = ? WHERE id = ?", [name, image, tag, id]);
+  return { ...cat, name, image, tag };
 }
 
 export async function deleteCategory(id) {
