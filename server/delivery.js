@@ -6,16 +6,34 @@ const LOGO_URL = "https://res.cloudinary.com/db4mpxc2k/image/upload/v1778619521/
 async function sendViaResend({ from, to, subject, text, html }) {
   const key = process.env.RESEND_API_KEY;
   if (!key) return false;
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from, to: [to], subject, text, html })
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Resend error: ${err}`);
+
+  async function attempt(sender) {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from: sender, to: [to], subject, text, html })
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      console.error(`[resend] Failed with from="${sender}":`, err);
+      return { ok: false, err };
+    }
+    console.log(`[resend] Email sent to ${to} from "${sender}"`);
+    return { ok: true };
   }
-  return true;
+
+  // Try with configured from address first
+  const first = await attempt(from);
+  if (first.ok) return true;
+
+  // Fallback to Resend default sender (works without domain verification)
+  if (!from.includes("resend.dev")) {
+    console.log("[resend] Retrying with onboarding@resend.dev fallback...");
+    const fallback = await attempt("Zyvora <onboarding@resend.dev>");
+    if (fallback.ok) return true;
+  }
+
+  throw new Error(`Resend error: ${first.err}`);
 }
 
 // Sends email via SMTP (fallback if Resend not configured)
