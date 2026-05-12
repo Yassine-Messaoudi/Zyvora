@@ -49,3 +49,12 @@ ENABLE_MESSAGE_CONTENT_INTENT=true
 ```
 
 Leave it as `false` if Discord shows `Used disallowed intents`.
+
+If startup logs say `Missing Access` while registering commands:
+
+- Make sure `GUILD_ID` is your actual server ID.
+- Make sure the bot is invited to that server with `bot` and `applications.commands` scopes.
+- Or remove `GUILD_ID` to register global commands.
+- Or set `SKIP_COMMAND_REGISTRATION=true` after commands are already registered.
+
+If ticket creation says the parent is invalid, `TICKET_CATEGORY_ID` must be a category ID, not a text channel ID. If it is empty or invalid, tickets are created without a category.

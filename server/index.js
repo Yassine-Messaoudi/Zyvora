@@ -22,7 +22,8 @@ import {
   findOrCreateCustomer, getCustomerByEmail, updateCustomerLastOrder,
   getActiveCoupon, addActivityLog, addDeliveryLog, getAdminSummary
 } from "./store.js";
-import { getWalletAddress, calculateCryptoAmount, createQrData, supportedCoins, getLivePrices, convertFiat } from "./payments.js";
+import { getWalletAddress, getPoolAddress, calculateCryptoAmount, createQrData, supportedCoins, getLivePrices, convertFiat } from "./payments.js";
+import { getIncomingTransactions, findMatchingPayment, getRequiredConfirmations } from "./blockchain.js";
 import { sendDeliveryEmail, sendDiscordWebhook, sendVerificationEmail } from "./delivery.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -167,6 +168,45 @@ setInterval(() => {
   expireOldInvoices().catch((error) => console.error("invoice expiry check failed", error));
 }, 30_000);
 
+// ── Blockchain payment detection loop ──
+
+async function checkPendingPayments() {
+  if (process.env.PAYMENT_MODE === "mock") return;
+  const pending = await getPendingInvoices();
+  for (const invoice of pending) {
+    if (!invoice.depositAddress || !invoice.selectedCoin) continue;
+    if (!["LTC", "BTC", "SOL", "ETH"].includes(invoice.selectedCoin)) continue;
+    try {
+      const txs = await getIncomingTransactions(invoice.selectedCoin, invoice.depositAddress);
+      const match = findMatchingPayment(txs, invoice.expectedCryptoAmount);
+      if (match) {
+        const required = getRequiredConfirmations(invoice.selectedCoin);
+        // Always update tx info
+        await updateInvoice(invoice.id, {
+          transactionId: match.txHash,
+          confirmationCount: match.confirmations
+        });
+        if (match.confirmations >= required) {
+          await updateInvoice(invoice.id, { status: "paid", transactionId: match.txHash, confirmationCount: match.confirmations });
+          await addInvoiceEvent(invoice.id, "payment_confirmed");
+          const confirmed = await getInvoiceById(invoice.id);
+          await completeInvoice(confirmed);
+          console.log(`[payments] ✓ Invoice ${invoice.id} confirmed — TX: ${match.txHash.slice(0, 16)}... (${match.confirmations} confs)`);
+        } else {
+          console.log(`[payments] ◎ Invoice ${invoice.id} detected — ${match.confirmations}/${required} confirmations`);
+        }
+      }
+    } catch (err) {
+      console.error(`[payments] Check failed for ${invoice.id}:`, err.message);
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+}
+
+setInterval(() => {
+  checkPendingPayments().catch((error) => console.error("payment check failed", error));
+}, 45_000);
+
 // ── Public routes ──
 
 app.get("/api/health", async (_req, res) => {
@@ -261,13 +301,18 @@ app.post("/api/invoices", checkoutLimiter, async (req, res) => {
     let qrCodeData = null;
     let qrCode = null;
     if (["LTC", "BTC", "SOL", "ETH"].includes(parsed.data.paymentMethod)) {
-      const settings = await getSettings();
-      depositAddress = getWalletAddress(settings, parsed.data.paymentMethod);
-      // Collect existing pending amounts for this coin to ensure uniqueness
       const allInvoices = await getAllInvoices();
-      const existingAmounts = allInvoices
-        .filter((inv) => inv.selectedCoin === parsed.data.paymentMethod && inv.status === "pending")
-        .map((inv) => inv.expectedCryptoAmount);
+      const pendingForCoin = allInvoices.filter((inv) => inv.selectedCoin === parsed.data.paymentMethod && inv.status === "pending");
+      // Try address pool first, fall back to single wallet address
+      const usedAddresses = pendingForCoin.map((inv) => inv.depositAddress).filter(Boolean);
+      const poolAddr = getPoolAddress(parsed.data.paymentMethod, usedAddresses);
+      if (poolAddr) {
+        depositAddress = poolAddr;
+      } else {
+        const settings = await getSettings();
+        depositAddress = getWalletAddress(settings, parsed.data.paymentMethod);
+      }
+      const existingAmounts = pendingForCoin.map((inv) => inv.expectedCryptoAmount);
       expectedCryptoAmount = await calculateCryptoAmount(totalUsd, parsed.data.paymentMethod, existingAmounts);
       const qr = await createQrData(parsed.data.paymentMethod, depositAddress, expectedCryptoAmount, id);
       qrCodeData = qr.data;

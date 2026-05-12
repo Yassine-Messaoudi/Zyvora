@@ -101,6 +101,21 @@ export function getWalletAddress(settings, coin) {
   return address;
 }
 
+// Address pool: assigns a unique address per invoice from a comma-separated env pool
+export function getPoolAddress(coin, usedAddresses = []) {
+  const poolStr = process.env[`${coin}_ADDRESS_POOL`] || "";
+  const pool = poolStr.split(",").map(a => a.trim()).filter(Boolean);
+  if (pool.length === 0) return null; // No pool configured, caller should fall back
+
+  const usedSet = new Set(usedAddresses.map(a => a.toLowerCase()));
+  const available = pool.filter(a => !usedSet.has(a.toLowerCase()));
+
+  if (available.length === 0) {
+    throw new Error(`All ${coin} addresses are in use (${pool.length} total). Wait for pending invoices to complete or add more addresses to ${coin}_ADDRESS_POOL.`);
+  }
+  return available[0];
+}
+
 export async function createQrData(coin, address, amount, invoiceId) {
   const meta = coinMeta[coin];
   const data = `${meta.uri}:${address}?amount=${amount}&label=${encodeURIComponent(invoiceId)}`;

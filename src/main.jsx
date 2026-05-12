@@ -1316,7 +1316,11 @@ function InvoicePage({ invoiceId }) {
     api("/settings/public").then((s) => setDiscordLink(s.discordInvite || "")).catch(() => {});
     api("/prices").then(setPrices).catch(() => {});
     const tick = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(tick);
+    // Poll invoice status every 10s for auto-detection
+    const poll = setInterval(() => {
+      api(`/invoices/${invoiceId}`).then((inv) => { if (inv) setInvoice(inv); }).catch(() => {});
+    }, 10_000);
+    return () => { clearInterval(tick); clearInterval(poll); };
   }, [invoiceId]);
   if (error) return <ErrorMessage message={error} />;
   if (!invoice) return <Loading />;
@@ -1326,6 +1330,8 @@ function InvoicePage({ invoiceId }) {
   const coinLabel = paymentMethods.find((p) => p.value === invoice.selectedCoin)?.label || invoice.selectedCoin;
   const coinIcon = paymentMethods.find((p) => p.value === invoice.selectedCoin)?.icon || "";
   const coinColor = paymentMethods.find((p) => p.value === invoice.selectedCoin)?.color || "#345D9D";
+  const detected = !paid && invoice.transactionId && invoice.status === "pending";
+  const requiredConfs = { BTC: 2, LTC: 2, ETH: 12, SOL: 1 }[invoice.selectedCoin] || 2;
   const shortAddr = invoice.depositAddress ? `${invoice.depositAddress.slice(0, 8)}...${invoice.depositAddress.slice(-6)}` : "";
   const copyText = (text, label) => { navigator.clipboard.writeText(text); setCopied(label); setTimeout(() => setCopied(""), 2000); };
   const createdAgo = () => { const diff = Math.floor((now - new Date(invoice.createdAt).getTime()) / 1000); return diff < 60 ? `${diff} seconds ago` : `${Math.floor(diff / 60)} minutes ago`; };
@@ -1395,17 +1401,19 @@ function InvoicePage({ invoiceId }) {
           <div className="inv-how-to-pay">
             <p className="inv-how-label">HOW TO PAY</p>
             <div className="inv-step"><span className="inv-step-num">1</span><span>Send {invoice.expectedCryptoAmount} {invoice.selectedCoin} to the address above</span></div>
-            <div className="inv-step"><span className="inv-step-num">2</span><span>After sending, open a ticket on our Discord with your Invoice ID</span></div>
+            <div className="inv-step"><span className="inv-step-num">2</span><span>Payment will be detected automatically after network confirmation</span></div>
             <div className="inv-step"><span className="inv-step-num">3</span><span>Send only {invoice.selectedCoin} to this address. Other cryptocurrencies will be lost.</span></div>
           </div>
-          <div className="inv-waiting">
-            <span className="inv-waiting-dot"></span>
-            Waiting for payment. Open a Discord ticket after sending.
-          </div>
-          {discordLink && (
-            <a href={discordLink} target="_blank" rel="noopener noreferrer" className="inv-discord-btn">
-              <MessageCircle className="h-5 w-5" /> Open Discord — Create a Ticket
-            </a>
+          {detected ? (
+            <div className="inv-waiting" style={{borderColor:"rgba(34,197,94,0.3)",background:"rgba(34,197,94,0.08)"}}>
+              <span className="inv-waiting-dot" style={{background:"#22c55e"}}></span>
+              Payment detected! Waiting for confirmations ({invoice.confirmationCount || 0}/{requiredConfs})
+            </div>
+          ) : (
+            <div className="inv-waiting">
+              <span className="inv-waiting-dot"></span>
+              Waiting for payment. This page updates automatically.
+            </div>
           )}
         </div>
       )}
@@ -1419,6 +1427,8 @@ function InvoicePage({ invoiceId }) {
             {invoice.discord && <div className="inv-info-row"><span>Discord</span><span className="inv-info-val">{invoice.discord}</span></div>}
             <div className="inv-info-row"><span>Total Price</span><span className="inv-info-val">{money(invoice.totalUsd)}</span></div>
             {invoice.expectedCryptoAmount && <div className="inv-info-row"><span>Total Amount ({invoice.selectedCoin})</span><span className="inv-info-val">{invoice.expectedCryptoAmount} {invoice.selectedCoin}</span></div>}
+            {invoice.transactionId && <div className="inv-info-row"><span>Transaction ID</span><span className="inv-info-val" style={{fontSize:"0.75rem",wordBreak:"break-all"}}>{invoice.transactionId}</span></div>}
+            {invoice.confirmationCount > 0 && <div className="inv-info-row"><span>Confirmations</span><span className="inv-info-val">{invoice.confirmationCount}</span></div>}
             <div className="inv-info-row"><span>Created</span><span className="inv-info-val">{createdAgo()}</span></div>
           </div>
           {prices && prices.fiatRates && (

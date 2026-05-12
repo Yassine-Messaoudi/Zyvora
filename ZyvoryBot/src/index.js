@@ -2,13 +2,14 @@ import "dotenv/config";
 import {
   Client,
   GatewayIntentBits,
+  MessageFlags,
   PermissionFlagsBits,
   REST,
   Routes,
   SlashCommandBuilder
 } from "discord.js";
 import { buildTicketPanelPayload } from "./ticketPanel.js";
-import { handleTicketButton, handleTicketModal } from "./ticketHandler.js";
+import { handleTicketButton, handleTicketModal, handleTicketSelect } from "./ticketHandler.js";
 
 const requiredEnv = ["DISCORD_TOKEN", "CLIENT_ID"];
 const missing = requiredEnv.filter((key) => !process.env[key]);
@@ -37,25 +38,38 @@ if (process.env.ENABLE_MESSAGE_CONTENT_INTENT === "true") {
 async function registerCommands() {
   const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
 
-  if (process.env.GUILD_ID) {
-    await rest.put(
-      Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
-      { body: commands }
-    );
+  if (process.env.SKIP_COMMAND_REGISTRATION === "true") {
+    console.log("Skipping slash command registration because SKIP_COMMAND_REGISTRATION=true");
     return;
   }
 
-  await rest.put(
-    Routes.applicationCommands(process.env.CLIENT_ID),
-    { body: commands }
-  );
+  try {
+    if (process.env.GUILD_ID) {
+      await rest.put(
+        Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
+        { body: commands }
+      );
+      console.log(`Registered guild slash commands for ${process.env.GUILD_ID}`);
+      return;
+    }
+
+    await rest.put(
+      Routes.applicationCommands(process.env.CLIENT_ID),
+      { body: commands }
+    );
+    console.log("Registered global slash commands");
+  } catch (error) {
+    console.warn("Slash command registration failed. The bot will stay online.");
+    console.warn("Check that GUILD_ID is correct and the bot was invited with the applications.commands scope.");
+    console.warn(error?.rawError?.message || error?.message || error);
+  }
 }
 
 const client = new Client({
   intents
 });
 
-client.once("ready", async () => {
+client.once("clientReady", async () => {
   await registerCommands();
   console.log(`ZyvoryBot online as ${client.user.tag}`);
 });
@@ -64,7 +78,7 @@ client.on("interactionCreate", async (interaction) => {
   try {
     if (interaction.isChatInputCommand() && interaction.commandName === "ticket-panel") {
       await interaction.channel.send(buildTicketPanelPayload());
-      await interaction.reply({ content: "Zyvory ticket panel posted.", ephemeral: true });
+      await interaction.reply({ content: "Zyvory ticket panel posted.", flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -73,12 +87,17 @@ client.on("interactionCreate", async (interaction) => {
       return;
     }
 
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith("ticket:")) {
+      await handleTicketSelect(interaction);
+      return;
+    }
+
     if (interaction.isModalSubmit() && interaction.customId.startsWith("ticket:")) {
       await handleTicketModal(interaction);
     }
   } catch (error) {
     console.error(error);
-    const payload = { content: "Something went wrong while handling that ticket action.", ephemeral: true };
+    const payload = { content: "Something went wrong while handling that ticket action.", flags: MessageFlags.Ephemeral };
     if (interaction.deferred || interaction.replied) {
       await interaction.followUp(payload).catch(() => {});
     } else {

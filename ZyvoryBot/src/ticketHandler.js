@@ -1,6 +1,5 @@
 import {
   ActionRowBuilder,
-  AttachmentBuilder,
   ButtonBuilder,
   ButtonStyle,
   ChannelType,
@@ -11,6 +10,8 @@ import {
   SectionBuilder,
   SeparatorBuilder,
   SeparatorSpacingSize,
+  StringSelectMenuBuilder,
+  StringSelectMenuOptionBuilder,
   TextDisplayBuilder,
   TextInputBuilder,
   TextInputStyle
@@ -19,6 +20,26 @@ import { ticketTypes } from "./ticketPanel.js";
 import { buildTranscriptAttachment } from "./transcript.js";
 
 const ticketTypeMap = new Map(ticketTypes.map((type) => [type.id, type]));
+
+const deliveryCategories = [
+  { label: "Robux", description: "Roblox / Robux delivery", emoji: "💎", value: "robux" },
+  { label: "CS2 / Valo / Apex Delivery", description: "Delivery tickets", emoji: "🎮", value: "fps_delivery" },
+  { label: "CS2 / Valo / Apex Support", description: "Support tickets", emoji: "🎮", value: "fps_support" },
+  { label: "IG / TG / TikTok", description: "Social delivery", emoji: "📘", value: "social_delivery" },
+  { label: "Rust / DayZ / Tarkov / FC26", description: "Game delivery", emoji: "🕹️", value: "game_delivery" }
+];
+
+const replacementCategories = [
+  { label: "Replace", description: "Replace category", emoji: "🔄", value: "replace" },
+  { label: "Product Issues", description: "Product issues", emoji: "🖥️", value: "product_issues" },
+  { label: "Social Support", description: "Social support", emoji: "👤", value: "social_support" },
+  { label: "VPN Support", description: "VPN support", emoji: "🔒", value: "vpn_support" },
+  { label: "FiveM / Spoofer / Codes", description: "FiveM and codes", emoji: "🖥️", value: "fivem_spoofer_codes" }
+];
+
+function ephemeral(content) {
+  return { content, flags: MessageFlags.Ephemeral };
+}
 
 function cleanName(value) {
   return value
@@ -55,6 +76,23 @@ async function safeDm(user, payload) {
   } catch {
     return false;
   }
+}
+
+async function resolveTicketParentId(guild) {
+  if (!process.env.TICKET_CATEGORY_ID) return null;
+
+  const parent = await guild.channels.fetch(process.env.TICKET_CATEGORY_ID).catch(() => null);
+  if (!parent) {
+    console.warn(`TICKET_CATEGORY_ID ${process.env.TICKET_CATEGORY_ID} was not found. Creating tickets without a category.`);
+    return null;
+  }
+
+  if (parent.type !== ChannelType.GuildCategory) {
+    console.warn(`TICKET_CATEGORY_ID ${process.env.TICKET_CATEGORY_ID} is not a category. Creating tickets without a category.`);
+    return null;
+  }
+
+  return parent.id;
 }
 
 function ticketActionPanel(type, user, staffRoleId = "") {
@@ -144,6 +182,170 @@ function replacementModal() {
     );
 }
 
+function questionsModal() {
+  return new ModalBuilder()
+    .setCustomId("ticket:questions_submit")
+    .setTitle("Questions")
+    .addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId("question")
+          .setLabel("Question")
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(true)
+          .setPlaceholder("Write your question...")
+      )
+    );
+}
+
+function generalSupportModal() {
+  return new ModalBuilder()
+    .setCustomId("ticket:general_submit")
+    .setTitle("General Support")
+    .addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId("order")
+          .setLabel("Order ID")
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setPlaceholder("Enter your Order ID")
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId("email")
+          .setLabel("Email")
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setPlaceholder("Enter your email address")
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId("message")
+          .setLabel("Message")
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(true)
+          .setPlaceholder("Write your message...")
+      )
+    );
+}
+
+function productNotReceivedModal(queue) {
+  const label = queue === "pending" ? "Pending Queue" : "Not Working / Replacements";
+  return new ModalBuilder()
+    .setCustomId(`ticket:not_received_submit:${queue}`)
+    .setTitle("Product Not Received")
+    .addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId("order")
+          .setLabel("Order ID")
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setPlaceholder("Enter your Order ID")
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId("email")
+          .setLabel("Email")
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setPlaceholder("Enter your email address")
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId("message")
+          .setLabel(`${label} message`)
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(true)
+          .setPlaceholder("Tell us what product you did not receive...")
+      )
+    );
+}
+
+function productNotReceivedSelectPayload() {
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId("ticket:not_received_select")
+    .setPlaceholder("Choose an option...")
+    .addOptions(
+      new StringSelectMenuOptionBuilder()
+        .setLabel("Not Working / Replacements")
+        .setDescription("Open in replacements queue")
+        .setEmoji("🔄")
+        .setValue("replacements"),
+      new StringSelectMenuOptionBuilder()
+        .setLabel("Pending")
+        .setDescription("Open in pending queue")
+        .setEmoji("⌛")
+        .setValue("pending")
+    );
+
+  return {
+    content: "**Product Not Received**\nChoose the exact product family to open the ticket in the correct category.\n**This menu expires in 2 minutes**",
+    components: [new ActionRowBuilder().addComponents(menu)],
+    flags: MessageFlags.Ephemeral
+  };
+}
+
+function categorySelectPayload(title, customId, categories) {
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId(customId)
+    .setPlaceholder("Choose an option...")
+    .addOptions(
+      categories.map((category) => (
+        new StringSelectMenuOptionBuilder()
+          .setLabel(category.label)
+          .setDescription(category.description)
+          .setEmoji(category.emoji)
+          .setValue(category.value)
+      ))
+    );
+
+  return {
+    content: `**${title}**\nChoose the exact product family to open the ticket in the correct category.\n**This menu expires in 2 minutes**`,
+    components: [new ActionRowBuilder().addComponents(menu)],
+    flags: MessageFlags.Ephemeral
+  };
+}
+
+function supportIssueModal(typeId, title, category = "") {
+  const categoryPart = category ? `:${category}` : "";
+  return new ModalBuilder()
+    .setCustomId(`ticket:${typeId}_submit${categoryPart}`)
+    .setTitle(title)
+    .addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId("order")
+          .setLabel("Order ID")
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setPlaceholder("Enter your Order ID")
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId("email")
+          .setLabel("Email")
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setPlaceholder("Enter your email address")
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId("message")
+          .setLabel("Describe your issue")
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(true)
+          .setPlaceholder("Please provide as much detail as possible...")
+      )
+    );
+}
+
+function findCategoryLabel(typeId, value) {
+  const source = typeId === "manual_delivery" ? deliveryCategories : replacementCategories;
+  return source.find((item) => item.value === value)?.label || value;
+}
+
 function replacementSentPanel(user, orderLabel = "") {
   const orderLine = orderLabel ? `\nOrder/Product: **${orderLabel}**` : "";
   const container = new ContainerBuilder()
@@ -174,13 +376,83 @@ function replacementSentPanel(user, orderLabel = "") {
   };
 }
 
+function formatSubmittedDetails(details = {}) {
+  const rows = Object.entries(details)
+    .filter(([, value]) => value)
+    .map(([label, value]) => `**${label}:**\n${value}`)
+    .join("\n\n");
+
+  return rows || "No extra details submitted.";
+}
+
+async function createTicket(interaction, type, details = {}) {
+  const existing = interaction.guild.channels.cache.find((channel) => (
+    channel.type === ChannelType.GuildText &&
+    channel.topic?.includes(`ticket-owner:${interaction.user.id}`) &&
+    channel.topic?.includes(`ticket-type:${type.id}`)
+  ));
+
+  if (existing) {
+    await interaction.reply(ephemeral(`You already have this ticket open: ${existing}`));
+    return null;
+  }
+
+  const overwrites = [
+    {
+      id: interaction.guild.roles.everyone.id,
+      deny: [PermissionFlagsBits.ViewChannel]
+    },
+    {
+      id: interaction.user.id,
+      allow: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.ReadMessageHistory,
+        PermissionFlagsBits.AttachFiles
+      ]
+    }
+  ];
+
+  if (process.env.STAFF_ROLE_ID) {
+    overwrites.push({
+      id: process.env.STAFF_ROLE_ID,
+      allow: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.ReadMessageHistory,
+        PermissionFlagsBits.ManageMessages
+      ]
+    });
+  }
+
+  const parentId = await resolveTicketParentId(interaction.guild);
+  const channel = await interaction.guild.channels.create({
+    name: `ticket-${cleanName(type.label)}-${cleanName(interaction.user.username)}`,
+    type: ChannelType.GuildText,
+    parent: parentId,
+    topic: `ticket-owner:${interaction.user.id} | ticket-type:${type.id}`,
+    permissionOverwrites: overwrites,
+    reason: `Zyvory ${type.label} ticket opened by ${interaction.user.tag}`
+  });
+
+  await channel.send(ticketWelcomePanel(type, interaction.user, process.env.STAFF_ROLE_ID));
+  await channel.send(`**Submitted by:** ${interaction.user}\n\n${formatSubmittedDetails(details)}\n\nYou can upload screenshots or files directly in this ticket if needed.`);
+
+  if (process.env.LOG_CHANNEL_ID) {
+    const logChannel = interaction.guild.channels.cache.get(process.env.LOG_CHANNEL_ID);
+    logChannel?.send(`🎫 Ticket opened: ${channel} by ${interaction.user.tag} (${type.label})`).catch(() => {});
+  }
+
+  return channel;
+}
+
 async function closeTicket(interaction, reason = "Ticket closed") {
   if (!isTicketChannel(interaction.channel)) {
-    await interaction.reply({ content: "This button only works inside ticket channels.", ephemeral: true });
+    await interaction.reply(ephemeral("This button only works inside ticket channels."));
     return;
   }
 
-  await interaction.reply({ content: "Creating transcript and closing this ticket in 8 seconds...", ephemeral: true });
+  await interaction.reply(ephemeral("Creating transcript and closing this ticket in 8 seconds..."));
 
   const ownerId = getTicketOwnerId(interaction.channel);
   const typeId = getTicketTypeId(interaction.channel);
@@ -225,12 +497,12 @@ export async function handleTicketButton(interaction) {
 
   if (typeId === "replacement_modal") {
     if (!isTicketChannel(interaction.channel)) {
-      await interaction.reply({ content: "Use this inside a ticket channel.", ephemeral: true });
+      await interaction.reply(ephemeral("Use this inside a ticket channel."));
       return;
     }
 
     if (!isStaff(interaction)) {
-      await interaction.reply({ content: "Only staff can send replacement messages.", ephemeral: true });
+      await interaction.reply(ephemeral("Only staff can send replacement messages."));
       return;
     }
 
@@ -240,13 +512,13 @@ export async function handleTicketButton(interaction) {
 
   if (typeId === "received") {
     if (!isTicketChannel(interaction.channel)) {
-      await interaction.reply({ content: "Use this inside a ticket channel.", ephemeral: true });
+      await interaction.reply(ephemeral("Use this inside a ticket channel."));
       return;
     }
 
     const ownerId = getTicketOwnerId(interaction.channel);
     if (interaction.user.id !== ownerId && !isStaff(interaction)) {
-      await interaction.reply({ content: "Only the ticket customer or staff can confirm this.", ephemeral: true });
+      await interaction.reply(ephemeral("Only the ticket customer or staff can confirm this."));
       return;
     }
 
@@ -256,80 +528,178 @@ export async function handleTicketButton(interaction) {
     return;
   }
 
+  if (typeId === "questions") {
+    await interaction.showModal(questionsModal());
+    return;
+  }
+
+  if (typeId === "general") {
+    await interaction.showModal(generalSupportModal());
+    return;
+  }
+
+  if (typeId === "not_received") {
+    await interaction.reply(productNotReceivedSelectPayload());
+    return;
+  }
+
+  if (typeId === "manual_delivery") {
+    await interaction.reply(categorySelectPayload("Manual Delivery", "ticket:manual_delivery_select", deliveryCategories));
+    return;
+  }
+
+  if (typeId === "replacement") {
+    await interaction.reply(categorySelectPayload("Replacement", "ticket:replacement_select", replacementCategories));
+    return;
+  }
+
+  if (typeId === "fn_issues") {
+    await interaction.showModal(supportIssueModal("fn_issues", "FN Issues"));
+    return;
+  }
+
+  if (typeId === "vpn_issues") {
+    await interaction.showModal(supportIssueModal("vpn_issues", "VPN Issues"));
+    return;
+  }
+
+  if (typeId === "social_issues") {
+    await interaction.showModal(supportIssueModal("social_issues", "Social Issues"));
+    return;
+  }
+
   const type = ticketTypeMap.get(typeId);
   if (!type) {
-    await interaction.reply({ content: "Unknown ticket type.", ephemeral: true });
+    await interaction.reply(ephemeral("Unknown ticket type."));
     return;
   }
 
-  const existing = interaction.guild.channels.cache.find((channel) => (
-    channel.type === ChannelType.GuildText &&
-    channel.topic?.includes(`ticket-owner:${interaction.user.id}`) &&
-    channel.topic?.includes(`ticket-type:${type.id}`)
-  ));
+  const channel = await createTicket(interaction, type);
+  if (channel) await interaction.reply(ephemeral(`Ticket created: ${channel}`));
+}
 
-  if (existing) {
-    await interaction.reply({ content: `You already have this ticket open: ${existing}`, ephemeral: true });
+export async function handleTicketSelect(interaction) {
+  if (interaction.customId === "ticket:not_received_select") {
+    const value = interaction.values?.[0] || "replacements";
+    await interaction.showModal(productNotReceivedModal(value));
     return;
   }
 
-  const overwrites = [
-    {
-      id: interaction.guild.roles.everyone.id,
-      deny: [PermissionFlagsBits.ViewChannel]
-    },
-    {
-      id: interaction.user.id,
-      allow: [
-        PermissionFlagsBits.ViewChannel,
-        PermissionFlagsBits.SendMessages,
-        PermissionFlagsBits.ReadMessageHistory,
-        PermissionFlagsBits.AttachFiles
-      ]
-    }
-  ];
-
-  if (process.env.STAFF_ROLE_ID) {
-    overwrites.push({
-      id: process.env.STAFF_ROLE_ID,
-      allow: [
-        PermissionFlagsBits.ViewChannel,
-        PermissionFlagsBits.SendMessages,
-        PermissionFlagsBits.ReadMessageHistory,
-        PermissionFlagsBits.ManageMessages
-      ]
-    });
+  if (interaction.customId === "ticket:manual_delivery_select") {
+    const value = interaction.values?.[0] || "robux";
+    await interaction.showModal(supportIssueModal("manual_delivery", "Manual Delivery", value));
+    return;
   }
 
-  const channel = await interaction.guild.channels.create({
-    name: `ticket-${cleanName(type.label)}-${cleanName(interaction.user.username)}`,
-    type: ChannelType.GuildText,
-    parent: process.env.TICKET_CATEGORY_ID || null,
-    topic: `ticket-owner:${interaction.user.id} | ticket-type:${type.id}`,
-    permissionOverwrites: overwrites,
-    reason: `Zyvory ${type.label} ticket opened by ${interaction.user.tag}`
-  });
-
-  await channel.send(ticketWelcomePanel(type, interaction.user, process.env.STAFF_ROLE_ID));
-
-  if (process.env.LOG_CHANNEL_ID) {
-    const logChannel = interaction.guild.channels.cache.get(process.env.LOG_CHANNEL_ID);
-    logChannel?.send(`🎫 Ticket opened: ${channel} by ${interaction.user.tag} (${type.label})`).catch(() => {});
+  if (interaction.customId === "ticket:replacement_select") {
+    const value = interaction.values?.[0] || "replace";
+    await interaction.showModal(supportIssueModal("replacement", "Replacement", value));
   }
-
-  await interaction.reply({ content: `Ticket created: ${channel}`, ephemeral: true });
 }
 
 export async function handleTicketModal(interaction) {
+  if (interaction.customId === "ticket:questions_submit") {
+    const type = ticketTypeMap.get("questions");
+    const channel = await createTicket(interaction, type, {
+      Question: interaction.fields.getTextInputValue("question")?.trim()
+    });
+    if (channel) await interaction.reply(ephemeral(`Ticket created: ${channel}`));
+    return;
+  }
+
+  if (interaction.customId === "ticket:general_submit") {
+    const type = ticketTypeMap.get("general");
+    const channel = await createTicket(interaction, type, {
+      "Order ID": interaction.fields.getTextInputValue("order")?.trim(),
+      Email: interaction.fields.getTextInputValue("email")?.trim(),
+      Message: interaction.fields.getTextInputValue("message")?.trim()
+    });
+    if (channel) await interaction.reply(ephemeral(`Ticket created: ${channel}`));
+    return;
+  }
+
+  if (interaction.customId.startsWith("ticket:not_received_submit:")) {
+    const queue = interaction.customId.split(":")[2] || "replacements";
+    const queueLabel = queue === "pending" ? "Pending" : "Not Working / Replacements";
+    const type = ticketTypeMap.get("not_received");
+    const channel = await createTicket(interaction, type, {
+      Queue: queueLabel,
+      "Order ID": interaction.fields.getTextInputValue("order")?.trim(),
+      Email: interaction.fields.getTextInputValue("email")?.trim(),
+      Message: interaction.fields.getTextInputValue("message")?.trim()
+    });
+    if (channel) await interaction.reply(ephemeral(`Ticket created: ${channel}`));
+    return;
+  }
+
+  if (interaction.customId.startsWith("ticket:manual_delivery_submit:")) {
+    const category = interaction.customId.split(":")[2] || "robux";
+    const type = ticketTypeMap.get("manual_delivery");
+    const channel = await createTicket(interaction, type, {
+      Category: findCategoryLabel("manual_delivery", category),
+      "Order ID": interaction.fields.getTextInputValue("order")?.trim(),
+      Email: interaction.fields.getTextInputValue("email")?.trim(),
+      Message: interaction.fields.getTextInputValue("message")?.trim()
+    });
+    if (channel) await interaction.reply(ephemeral(`Ticket created: ${channel}`));
+    return;
+  }
+
+  if (interaction.customId.startsWith("ticket:replacement_submit:")) {
+    const category = interaction.customId.split(":")[2] || "replace";
+    const type = ticketTypeMap.get("replacement");
+    const channel = await createTicket(interaction, type, {
+      Category: findCategoryLabel("replacement", category),
+      "Order ID": interaction.fields.getTextInputValue("order")?.trim(),
+      Email: interaction.fields.getTextInputValue("email")?.trim(),
+      Message: interaction.fields.getTextInputValue("message")?.trim()
+    });
+    if (channel) await interaction.reply(ephemeral(`Ticket created: ${channel}`));
+    return;
+  }
+
+  if (interaction.customId === "ticket:fn_issues_submit") {
+    const type = ticketTypeMap.get("fn_issues");
+    const channel = await createTicket(interaction, type, {
+      "Order ID": interaction.fields.getTextInputValue("order")?.trim(),
+      Email: interaction.fields.getTextInputValue("email")?.trim(),
+      Issue: interaction.fields.getTextInputValue("message")?.trim()
+    });
+    if (channel) await interaction.reply(ephemeral(`Ticket created: ${channel}`));
+    return;
+  }
+
+  if (interaction.customId === "ticket:vpn_issues_submit") {
+    const type = ticketTypeMap.get("vpn_issues");
+    const channel = await createTicket(interaction, type, {
+      "Order ID": interaction.fields.getTextInputValue("order")?.trim(),
+      Email: interaction.fields.getTextInputValue("email")?.trim(),
+      Issue: interaction.fields.getTextInputValue("message")?.trim()
+    });
+    if (channel) await interaction.reply(ephemeral(`Ticket created: ${channel}`));
+    return;
+  }
+
+  if (interaction.customId === "ticket:social_issues_submit") {
+    const type = ticketTypeMap.get("social_issues");
+    const channel = await createTicket(interaction, type, {
+      "Order ID": interaction.fields.getTextInputValue("order")?.trim(),
+      Email: interaction.fields.getTextInputValue("email")?.trim(),
+      Issue: interaction.fields.getTextInputValue("message")?.trim()
+    });
+    if (channel) await interaction.reply(ephemeral(`Ticket created: ${channel}`));
+    return;
+  }
+
   if (interaction.customId !== "ticket:replacement_submit") return;
 
   if (!isTicketChannel(interaction.channel)) {
-    await interaction.reply({ content: "Use this inside a ticket channel.", ephemeral: true });
+    await interaction.reply(ephemeral("Use this inside a ticket channel."));
     return;
   }
 
   if (!isStaff(interaction)) {
-    await interaction.reply({ content: "Only staff can send replacement messages.", ephemeral: true });
+    await interaction.reply(ephemeral("Only staff can send replacement messages."));
     return;
   }
 
@@ -339,7 +709,7 @@ export async function handleTicketModal(interaction) {
   const message = interaction.fields.getTextInputValue("message")?.trim();
 
   if (!owner) {
-    await interaction.reply({ content: "I could not find the ticket customer.", ephemeral: true });
+    await interaction.reply(ephemeral("I could not find the ticket customer."));
     return;
   }
 
@@ -360,8 +730,7 @@ export async function handleTicketModal(interaction) {
     await logChannel?.send(`🔁 Replacement sent in ${interaction.channel} by ${interaction.user.tag}${orderLabel ? ` for ${orderLabel}` : ""}.`).catch(() => {});
   }
 
-  await interaction.reply({
-    content: dmSent ? "Replacement message sent to the customer DM." : "Customer DM failed, so I posted the replacement in the ticket.",
-    ephemeral: true
-  });
+  await interaction.reply(ephemeral(
+    dmSent ? "Replacement message sent to the customer DM." : "Customer DM failed, so I posted the replacement in the ticket."
+  ));
 }

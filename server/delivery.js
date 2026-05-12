@@ -2,6 +2,23 @@ import nodemailer from "nodemailer";
 
 const LOGO_URL = "https://res.cloudinary.com/db4mpxc2k/image/upload/v1778619521/Zyvolalogo_yecrow.png";
 
+// Sends email via Resend HTTP API (uses port 443, never blocked)
+async function sendViaResend({ from, to, subject, text, html }) {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) return false;
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ from, to: [to], subject, text, html })
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Resend error: ${err}`);
+  }
+  return true;
+}
+
+// Sends email via SMTP (fallback if Resend not configured)
 function getTransport() {
   if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) return null;
   const port = Number(process.env.SMTP_PORT || 587);
@@ -20,9 +37,21 @@ function getTransport() {
   });
 }
 
-export async function sendVerificationEmail(email, code) {
+// Unified send: tries Resend first, then SMTP
+async function sendEmail({ from, to, subject, text, html }) {
+  const sender = from || process.env.SMTP_FROM || "Zyvora <noreply@zyvory.xyz>";
+  // Try Resend first (HTTP, never blocked)
+  if (process.env.RESEND_API_KEY) {
+    return sendViaResend({ from: sender, to, subject, text, html });
+  }
+  // Fallback to SMTP
   const transport = getTransport();
   if (!transport) return false;
+  await transport.sendMail({ from: sender, to, subject, text, html });
+  return true;
+}
+
+export async function sendVerificationEmail(email, code) {
   const html = `
 <!DOCTYPE html>
 <html lang="en">
@@ -57,19 +86,15 @@ export async function sendVerificationEmail(email, code) {
   </table>
 </body>
 </html>`;
-  await transport.sendMail({
-    from: process.env.SMTP_FROM || "Zyvora Market <orders@zyvora.local>",
+  return sendEmail({
     to: email,
     subject: `${code} — Zyvora Dashboard Verification Code`,
     text: `Your Zyvora verification code is: ${code}\n\nThis code expires in 10 minutes.\nIf you didn't request this, ignore this email.`,
     html
   });
-  return true;
 }
 
 export async function sendDeliveryEmail(invoice, order) {
-  const transport = getTransport();
-  if (!transport) return false;
   const deliveryItems = Array.isArray(order.deliveryItems)
     ? (typeof order.deliveryItems[0] === "string" ? JSON.parse(order.deliveryItems) : order.deliveryItems)
     : [];
@@ -79,13 +104,11 @@ export async function sendDeliveryEmail(invoice, order) {
     ...item.delivered.map((value) => `- ${value}`),
     ""
   ]);
-  await transport.sendMail({
-    from: process.env.SMTP_FROM || "orders@zyvory.local",
+  return sendEmail({
     to: invoice.customerEmail,
     subject: `Your Zyvory Market order ${order.id}`,
     text: `Thank you for your purchase.\n\n${lines.join("\n")}`
   });
-  return true;
 }
 
 export async function sendDiscordWebhook(event, payload) {

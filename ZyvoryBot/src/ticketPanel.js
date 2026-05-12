@@ -20,59 +20,59 @@ const __dirname = path.dirname(__filename);
 export const ticketTypes = [
   {
     id: "questions",
-    label: "Questions",
+    label: "Ask Question",
     emoji: "❔",
     title: "Have a quick question about our products?",
-    description: "Press **Questions** to open the matching ticket flow."
+    description: "Press **Ask Question** to open the matching ticket flow."
   },
   {
     id: "general",
-    label: "General Support",
+    label: "Store Support",
     emoji: "🎧",
     title: "Need help with anything on our store?",
-    description: "Press **General Support** to open the matching ticket flow."
+    description: "Press **Store Support** to open the matching ticket flow."
   },
   {
     id: "not_received",
-    label: "Product Not Received",
+    label: "Missing Product",
     emoji: "📦",
     title: "Did not receive your product after purchase?",
-    description: "Press **Product Not Received** to open the ticket flow."
+    description: "Press **Missing Product** to open the ticket flow."
   },
   {
     id: "manual_delivery",
-    label: "Manual Delivery",
+    label: "Manual Order",
     emoji: "🛵",
     title: "This ticket is for products delivered manually by us.",
-    description: "Press **Manual Delivery** to open the matching ticket flow."
+    description: "Press **Manual Order** to open the matching ticket flow."
   },
   {
     id: "replacement",
-    label: "Replacement",
+    label: "Replace Item",
     emoji: "🔁",
     title: "Something is not working? Request a replacement.",
-    description: "Press **Replacement** to open the matching ticket flow."
+    description: "Press **Replace Item** to open the matching ticket flow."
   },
   {
     id: "fn_issues",
-    label: "FN Issues",
+    label: "Fortnite Help",
     emoji: "⚙️",
     title: "Issues with Fortnite accounts or services?",
-    description: "Press **FN Issues** to open the matching ticket flow."
+    description: "Press **Fortnite Help** to open the matching ticket flow."
   },
   {
     id: "vpn_issues",
-    label: "VPN Issues",
+    label: "VPN Help",
     emoji: "🔒",
     title: "Having trouble with your VPN product?",
-    description: "Press **VPN Issues** to open the matching ticket flow."
+    description: "Press **VPN Help** to open the matching ticket flow."
   },
   {
     id: "social_issues",
-    label: "Social Issues",
+    label: "Social Help",
     emoji: "👤",
     title: "Problems with social media accounts or services?",
-    description: "Press **Social Issues** to open the matching ticket flow."
+    description: "Press **Social Help** to open the matching ticket flow."
   }
 ];
 
