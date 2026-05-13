@@ -77,6 +77,11 @@ export async function initDatabase() {
   // Migrate existing databases
   await db.execute(`ALTER TABLE products MODIFY COLUMN image LONGTEXT DEFAULT NULL`).catch(() => {});
   await db.execute(`ALTER TABLE products ADD COLUMN stock_count INT NOT NULL DEFAULT 0`).catch(() => {});
+  await db.execute(`ALTER TABLE products ADD COLUMN features TEXT DEFAULT NULL`).catch(() => {});
+  await db.execute(`ALTER TABLE products ADD COLUMN delivery_type VARCHAR(50) DEFAULT 'license key'`).catch(() => {});
+  await db.execute(`ALTER TABLE products ADD COLUMN status VARCHAR(20) DEFAULT 'active'`).catch(() => {});
+  await db.execute(`ALTER TABLE products ADD COLUMN meta_title VARCHAR(255) DEFAULT NULL`).catch(() => {});
+  await db.execute(`ALTER TABLE products ADD COLUMN meta_description TEXT DEFAULT NULL`).catch(() => {});
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS product_stock (

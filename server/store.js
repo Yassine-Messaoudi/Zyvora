@@ -26,8 +26,14 @@ function normalizeProductRow(row) {
     badge: row.badge,
     shortDescription: row.short_description,
     description: row.description,
+    features: parseJson(row.features, []),
+    deliveryType: row.delivery_type || "license key",
+    status: row.status || "active",
     stockCount,
     stockStatus: stockCount > 0 ? "In stock" : "Out of stock",
+    stockType: row.delivery_type === "manual delivery" ? "manual" : "auto",
+    metaTitle: row.meta_title || "",
+    metaDescription: row.meta_description || "",
     createdAt: row.created_at
   };
 }
@@ -79,6 +85,7 @@ function normalizeReviewRow(row) {
   return {
     id: row.id,
     productId: row.product_id,
+    invoiceId: row.invoice_id,
     name: row.name,
     rating: row.rating,
     text: row.text,
@@ -192,16 +199,19 @@ export async function getProductStock(productId) {
 
 export async function createProduct(data) {
   const id = data.id;
-  const slug = await uniqueSlug(data.name);
+  const slug = data.slug ? await uniqueSlug(data.slug) : await uniqueSlug(data.name);
   const categoryId = await resolveCategoryId(data.category);
+  const features = Array.isArray(data.features) ? JSON.stringify(data.features) : (data.features || null);
   await query(`
     INSERT INTO products (id, slug, name, category_id, price, image, badge, stock_count,
-    short_description, description)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    short_description, description, features, delivery_type, status, meta_title, meta_description)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     id, slug, data.name, categoryId, data.price || 0, data.image || null,
     data.badge || "New", Number(data.stockCount) || 0,
-    data.shortDescription || "", data.description || ""
+    data.shortDescription || "", data.description || "",
+    features, data.deliveryType || "license key", data.status || "active",
+    data.metaTitle || null, data.metaDescription || null
   ]);
   return getProductById(id);
 }
@@ -211,10 +221,14 @@ export async function updateProduct(id, data) {
   if (!existing) return null;
   const categoryId = data.category ? await resolveCategoryId(data.category) : existing.category_id;
   const name = data.name || existing.name;
-  const slug = await uniqueSlug(name, id);
+  const slug = data.slug ? await uniqueSlug(data.slug, id) : await uniqueSlug(name, id);
+  const features = data.features !== undefined
+    ? (Array.isArray(data.features) ? JSON.stringify(data.features) : data.features)
+    : JSON.stringify(existing.features || []);
   await query(`
     UPDATE products SET slug=?, name=?, category_id=?, price=?, image=?, badge=?,
-    stock_count=?, short_description=?, description=? WHERE id=?
+    stock_count=?, short_description=?, description=?, features=?, delivery_type=?,
+    status=?, meta_title=?, meta_description=? WHERE id=?
   `, [
     slug, name, categoryId,
     data.price !== undefined ? data.price : existing.price,
@@ -223,6 +237,11 @@ export async function updateProduct(id, data) {
     data.stockCount !== undefined ? Number(data.stockCount) : existing.stockCount,
     data.shortDescription !== undefined ? data.shortDescription : existing.shortDescription,
     data.description !== undefined ? data.description : existing.description,
+    features,
+    data.deliveryType || existing.deliveryType,
+    data.status || existing.status,
+    data.metaTitle !== undefined ? data.metaTitle : existing.metaTitle,
+    data.metaDescription !== undefined ? data.metaDescription : existing.metaDescription,
     id
   ]);
   return getProductById(id);
@@ -233,8 +252,24 @@ export async function deleteProduct(id) {
 }
 
 export async function consumeStock(productId, quantity, invoiceId) {
+  // Try to consume from product_stock table (real delivery items)
+  const stockRows = await query(
+    "SELECT id, stock_value FROM product_stock WHERE product_id = ? AND is_sold = 0 ORDER BY created_at ASC LIMIT ?",
+    [productId, quantity]
+  );
+  if (stockRows.length > 0) {
+    const delivered = [];
+    for (const row of stockRows) {
+      await query("UPDATE product_stock SET is_sold = 1, sold_at = NOW(), invoice_id = ? WHERE id = ?", [invoiceId, row.id]);
+      delivered.push(row.stock_value);
+    }
+    // Sync the stock_count on products table
+    await query("UPDATE products SET stock_count = GREATEST(stock_count - ?, 0) WHERE id = ?", [stockRows.length, productId]);
+    return delivered;
+  }
+  // Fallback: no items in product_stock table, just decrement count
   await query("UPDATE products SET stock_count = GREATEST(stock_count - ?, 0) WHERE id = ?", [quantity, productId]);
-  return [`${quantity}x delivered`];
+  return [`${quantity}x delivered (stock items pending upload)`];
 }
 
 // ── Public product (strip sensitive data) ──
@@ -251,6 +286,9 @@ export function publicProduct(product) {
     badge: product.badge,
     shortDescription: product.shortDescription,
     description: product.description,
+    features: product.features,
+    deliveryType: product.deliveryType,
+    status: product.status,
     stockCount: product.stockCount,
     stockStatus: product.stockStatus,
     createdAt: product.createdAt
@@ -325,10 +363,37 @@ export async function getPendingInvoices() {
   return rows.map(normalizeInvoiceRow);
 }
 
+export async function getInvoicesByEmail(email) {
+  const rows = await query("SELECT * FROM invoices WHERE customer_email = ? ORDER BY created_at DESC", [email]);
+  return rows.map(normalizeInvoiceRow);
+}
+
+export async function getInvoicesByCoin(coin) {
+  const rows = await query("SELECT * FROM invoices WHERE selected_coin = ? AND status = 'pending' ORDER BY created_at ASC", [coin]);
+  return rows.map(normalizeInvoiceRow);
+}
+
+export async function orderExistsForInvoice(invoiceId) {
+  const row = await queryOne("SELECT id FROM orders WHERE invoice_id = ?", [invoiceId]);
+  return !!row;
+}
+
 // ── Orders ──
 
 export async function getAllOrders() {
   const rows = await query("SELECT * FROM orders ORDER BY created_at DESC");
+  return rows.map(normalizeOrderRow);
+}
+
+export async function getOrderByInvoiceId(invoiceId) {
+  const row = await queryOne("SELECT * FROM orders WHERE invoice_id = ?", [invoiceId]);
+  return normalizeOrderRow(row);
+}
+
+export async function getOrdersByInvoiceIds(invoiceIds) {
+  if (!invoiceIds.length) return [];
+  const placeholders = invoiceIds.map(() => "?").join(",");
+  const rows = await query(`SELECT * FROM orders WHERE invoice_id IN (${placeholders}) ORDER BY created_at DESC`, invoiceIds);
   return rows.map(normalizeOrderRow);
 }
 
@@ -384,15 +449,75 @@ export async function updateCustomerLastOrder(email) {
   await query("UPDATE customers SET last_order_at = NOW() WHERE email = ?", [email]);
 }
 
+export async function deductCustomerBalance(email, amount) {
+  await query("UPDATE customers SET balance = GREATEST(balance - ?, 0) WHERE email = ?", [amount, email]);
+}
+
 export async function getCustomerCount() {
   const row = await queryOne("SELECT COUNT(*) as cnt FROM customers");
   return row.cnt;
+}
+
+export async function getAllCustomers() {
+  return query("SELECT * FROM customers ORDER BY created_at DESC");
+}
+
+export async function updateCustomerBalance(email, newBalance) {
+  await query("UPDATE customers SET balance = ? WHERE email = ?", [newBalance, email]);
+  return getCustomerByEmail(email);
+}
+
+// ── Reviews (admin) ──
+
+export async function getAllReviews() {
+  const rows = await query("SELECT r.*, p.name as product_name FROM reviews r LEFT JOIN products p ON r.product_id = p.id ORDER BY r.created_at DESC");
+  return rows.map(r => ({ ...normalizeReviewRow(r), productName: r.product_name || "Unknown" }));
+}
+
+export async function updateReviewStatus(id, status) {
+  await query("UPDATE reviews SET status = ? WHERE id = ?", [status, id]);
+  const row = await queryOne("SELECT * FROM reviews WHERE id = ?", [id]);
+  return normalizeReviewRow(row);
+}
+
+export async function deleteReview(id) {
+  await query("DELETE FROM reviews WHERE id = ?", [id]);
 }
 
 // ── Coupons ──
 
 export async function getActiveCoupon(code) {
   return queryOne("SELECT * FROM coupons WHERE code = ? AND active = 1 AND expires_at > NOW()", [code]);
+}
+
+export async function getAllCoupons() {
+  return query("SELECT * FROM coupons ORDER BY created_at DESC");
+}
+
+export async function createCoupon(data) {
+  await query(
+    "INSERT INTO coupons (code, type, value, active, expires_at) VALUES (?, ?, ?, ?, ?)",
+    [data.code, data.type || "percent", data.value, data.active ? 1 : 0, data.expiresAt]
+  );
+  return queryOne("SELECT * FROM coupons WHERE code = ?", [data.code]);
+}
+
+export async function updateCoupon(id, data) {
+  const sets = [];
+  const params = [];
+  if (data.code !== undefined) { sets.push("code = ?"); params.push(data.code); }
+  if (data.type !== undefined) { sets.push("type = ?"); params.push(data.type); }
+  if (data.value !== undefined) { sets.push("value = ?"); params.push(data.value); }
+  if (data.active !== undefined) { sets.push("active = ?"); params.push(data.active ? 1 : 0); }
+  if (data.expiresAt !== undefined) { sets.push("expires_at = ?"); params.push(data.expiresAt); }
+  if (!sets.length) return queryOne("SELECT * FROM coupons WHERE id = ?", [id]);
+  params.push(id);
+  await query(`UPDATE coupons SET ${sets.join(", ")} WHERE id = ?`, params);
+  return queryOne("SELECT * FROM coupons WHERE id = ?", [id]);
+}
+
+export async function deleteCoupon(id) {
+  await query("DELETE FROM coupons WHERE id = ?", [id]);
 }
 
 // ── Activity Logs ──

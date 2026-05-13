@@ -8,6 +8,7 @@ import {
   Boxes,
   Car,
   ChevronDown,
+  ChevronLeft,
   CheckCircle2,
   Code2,
   Copy,
@@ -1126,9 +1127,23 @@ function CheckoutPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [discordLink, setDiscordLink] = useState("");
+  const [couponMsg, setCouponMsg] = useState("");
+  const [couponDiscount, setCouponDiscount] = useState(0);
   useEffect(() => {
     api("/settings/public").then((s) => setDiscordLink(s.discordInvite || "")).catch(() => {});
   }, []);
+  const applyCoupon = async () => {
+    if (!form.couponCode.trim()) return;
+    setCouponMsg(""); setCouponDiscount(0);
+    try {
+      const result = await api("/coupons/validate", { method: "POST", body: JSON.stringify({ code: form.couponCode, subtotal: cart.total }) });
+      setCouponDiscount(result.discount);
+      setCouponMsg(`Coupon applied! -€${result.discount.toFixed(2)}`);
+    } catch (err) {
+      setCouponMsg(err.message);
+      setCouponDiscount(0);
+    }
+  };
   const submit = async (event) => {
     event.preventDefault();
     setError("");
@@ -1173,7 +1188,8 @@ function CheckoutPage() {
           </div>
           <div className="co-subtotals">
             <div className="co-row"><span>Subtotal</span><span><Money value={cart.total} /></span></div>
-            <div className="co-row co-row-total"><span>Total</span><span><Money value={cart.total} /></span></div>
+            {couponDiscount > 0 && <div className="co-row" style={{color:"#22c55e"}}><span>Discount</span><span>-<Money value={couponDiscount} /></span></div>}
+            <div className="co-row co-row-total"><span>Total</span><span><Money value={Math.max(0, cart.total - couponDiscount)} /></span></div>
           </div>
           <div className="co-support">
             <p className="co-support-title">Having issues with your order?</p>
@@ -1198,9 +1214,10 @@ function CheckoutPage() {
           <div className="co-section">
             <p className="co-section-label">DISCOUNT</p>
             <div className="co-coupon-row">
-              <input value={form.couponCode} onChange={(e) => setForm({ ...form, couponCode: e.target.value })} placeholder="Coupon Code" className="co-coupon-input" />
-              <button type="button" className="co-coupon-btn">Apply <span className="co-arrow">→</span></button>
+              <input value={form.couponCode} onChange={(e) => { setForm({ ...form, couponCode: e.target.value }); setCouponMsg(""); setCouponDiscount(0); }} placeholder="Coupon Code" className="co-coupon-input" />
+              <button type="button" className="co-coupon-btn" onClick={applyCoupon}>Apply <span className="co-arrow">→</span></button>
             </div>
+            {couponMsg && <p className={`text-sm mt-2 ${couponDiscount > 0 ? "text-green-400" : "text-red-400"}`}>{couponMsg}</p>}
           </div>
           <div className="co-section">
             <div className="co-payment-head">
@@ -1377,7 +1394,50 @@ function InvoicePage({ invoiceId }) {
           </Link>
         </div>
       )}
-      {!paid && !expired && invoice.depositAddress && (
+      {!paid && !expired && invoice.selectedCoin === "PAYPAL_FF" && invoice.depositAddress && (
+        <div className="inv-pay-card">
+          <div className="inv-pay-header">
+            <div className="inv-pay-coin">
+              <span className="co-pay-icon" style={{ background: "#003087" }}>P</span>
+              <div>
+                <p className="inv-pay-coin-label">PayPal Friends &amp; Family</p>
+                <p className="inv-pay-coin-addr">Manual verification required</p>
+              </div>
+            </div>
+            <p className="inv-pay-amount-top">€{Number(invoice.totalUsd).toFixed(2)}</p>
+          </div>
+          <div className="inv-exact-amount">
+            <p className="inv-exact-label">SEND TO THIS PAYPAL</p>
+            <div className="inv-exact-row">
+              <span className="inv-exact-value">{invoice.depositAddress}</span>
+              <button className="inv-copy-btn" onClick={() => copyText(invoice.depositAddress, "addr")} title="Copy PayPal email">
+                {copied === "addr" ? <CheckCircle2 className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+          <div className="inv-exact-amount" style={{marginTop:"0.75rem"}}>
+            <p className="inv-exact-label">AMOUNT TO SEND</p>
+            <div className="inv-exact-row">
+              <span className="inv-exact-value">€{Number(invoice.totalUsd).toFixed(2)} EUR</span>
+              <button className="inv-copy-btn" onClick={() => copyText(String(invoice.totalUsd), "amount")} title="Copy amount">
+                {copied === "amount" ? <CheckCircle2 className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+          <div className="inv-how-to-pay">
+            <p className="inv-how-label">HOW TO PAY</p>
+            <div className="inv-step"><span className="inv-step-num">1</span><span>Open PayPal and send €{Number(invoice.totalUsd).toFixed(2)} to {invoice.depositAddress}</span></div>
+            <div className="inv-step"><span className="inv-step-num">2</span><span>Select <strong>Friends &amp; Family</strong> (not Goods &amp; Services)</span></div>
+            <div className="inv-step"><span className="inv-step-num">3</span><span>Include your invoice ID <strong>{invoice.id}</strong> in the payment note</span></div>
+            <div className="inv-step"><span className="inv-step-num">4</span><span>Open a support ticket with your payment screenshot for manual verification</span></div>
+          </div>
+          <div className="inv-waiting">
+            <span className="inv-waiting-dot"></span>
+            PayPal payments require manual verification. Open a ticket after sending.
+          </div>
+        </div>
+      )}
+      {!paid && !expired && invoice.selectedCoin !== "PAYPAL_FF" && invoice.depositAddress && (
         <div className="inv-pay-card">
           <div className="inv-pay-header">
             <div className="inv-pay-coin">
@@ -1509,6 +1569,134 @@ function CopyField({ label, value }) {
   );
 }
 
+function OrderDetailView({ order, invoice, customerEmail, onBack }) {
+  const [copiedKey, setCopiedKey] = useState(null);
+  const items = typeof order.items === "string" ? JSON.parse(order.items) : (order.items || []);
+  const deliveryItems = typeof order.deliveryItems === "string" ? JSON.parse(order.deliveryItems) : (order.deliveryItems || []);
+  const date = new Date(order.createdAt);
+  const dateStr = date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  const timeStr = date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const total = invoice?.totalUsd || order.totalUsd || 0;
+  const isDelivered = order.status === "completed";
+  const copyVal = (val, key) => { navigator.clipboard?.writeText(val); setCopiedKey(key); setTimeout(() => setCopiedKey(null), 2000); };
+  const allDelivered = deliveryItems.flatMap(d => (d.delivered || []).map(v => `${d.name}: ${v}`));
+  const copyAll = () => { navigator.clipboard?.writeText(allDelivered.join("\n")); setCopiedKey("all"); setTimeout(() => setCopiedKey(null), 2000); };
+  const downloadAll = () => {
+    const blob = new Blob([allDelivered.join("\n")], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = `order-${order.id}.txt`; a.click(); URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="od-wrap">
+      <button className="od-back" onClick={onBack}><ChevronLeft className="h-4 w-4" /> Back to Orders</button>
+
+      <div className="od-header">
+        <div>
+          <h1 className="od-title">Order {order.id}</h1>
+          <p className="od-subtitle">Placed on {dateStr} at {timeStr}</p>
+        </div>
+        {invoice && <button className="od-download-invoice" onClick={() => window.open(`/invoice/${invoice.id}`, "_blank")}><Download className="h-4 w-4" /> Download Invoice</button>}
+      </div>
+
+      <div className="od-status-banner" style={{ borderColor: isDelivered ? "rgba(34,197,94,0.25)" : "rgba(250,204,21,0.25)", background: isDelivered ? "rgba(34,197,94,0.06)" : "rgba(250,204,21,0.06)" }}>
+        <div style={{display:"flex",alignItems:"center",gap:".6rem"}}>
+          <CheckCircle2 className="h-6 w-6" style={{color: isDelivered ? "#4ade80" : "#facc15"}} />
+          <div>
+            <strong style={{color: isDelivered ? "#4ade80" : "#facc15"}}>Order Status: {isDelivered ? "Delivered" : order.status}</strong>
+            <p style={{color:"#8b949e",fontSize:".85rem",margin:0}}>{isDelivered ? "Your order has been successfully delivered" : "Your order is being processed"}</p>
+          </div>
+        </div>
+        <strong style={{color:"#f0f6ff",fontSize:"1.3rem"}}>€{Number(total).toFixed(2)}</strong>
+      </div>
+
+      <div className="od-grid">
+        <div className="od-col">
+          <div className="od-card">
+            <h3><Package className="h-4 w-4" /> Order Items</h3>
+            {items.map((item, i) => (
+              <div key={i} className="od-item">
+                <div>
+                  <strong>{item.name}</strong>
+                  <p>{item.name}</p>
+                  <span className="od-qty">Qty: {item.quantity}</span>
+                </div>
+                <strong>€{Number(item.price * item.quantity).toFixed(2)}</strong>
+              </div>
+            ))}
+            <div className="od-totals">
+              <div><span>Subtotal</span><span>€{Number(total).toFixed(2)}</span></div>
+              <div className="od-total-row"><span>Total</span><span>€{Number(total).toFixed(2)}</span></div>
+              {invoice?.expectedCryptoAmount && <div><span>Amount Paid</span><span>€{Number(invoice.totalUsd).toFixed(2)}</span></div>}
+            </div>
+          </div>
+
+          {deliveryItems.length > 0 && (
+            <div className="od-card">
+              <div className="od-card-head">
+                <h3><CheckCircle2 className="h-4 w-4 text-green-400" /> Delivered Items</h3>
+                <div style={{display:"flex",gap:".4rem"}}>
+                  <button className="od-action-btn" onClick={copyAll}><Copy className="h-3.5 w-3.5" /> {copiedKey === "all" ? "Copied!" : "Copy All"}</button>
+                  <button className="od-action-btn" onClick={downloadAll}><Download className="h-3.5 w-3.5" /> Download All</button>
+                </div>
+              </div>
+              {deliveryItems.map((di, i) => (
+                <div key={i} className="od-delivery-item">
+                  <div className="od-delivery-head"><KeyRound className="h-4 w-4 text-indigo-400" /> <strong>{di.deliveryType || "License Key"}</strong></div>
+                  {(di.delivered || []).map((val, j) => (
+                    <div key={j} className="od-delivery-value">
+                      <code>{val}</code>
+                      <button className="od-copy-btn" onClick={() => copyVal(val, `${i}-${j}`)}>{copiedKey === `${i}-${j}` ? <CheckCircle2 className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />} {copiedKey === `${i}-${j}` ? "Copied" : "Copy"}</button>
+                    </div>
+                  ))}
+                  <p className="od-delivery-meta">Delivered on {dateStr} at {timeStr} - {di.name}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="od-col">
+          <div className="od-card">
+            <h3><Wallet className="h-4 w-4" /> Payment Information</h3>
+            <div className="od-info-list">
+              <div><span>Payment Method</span><strong>{invoice?.selectedCoin || "Balance"}</strong></div>
+              {invoice?.expectedCryptoAmount && <div><span>Amount Paid</span><strong>€{Number(invoice.totalUsd).toFixed(2)}</strong></div>}
+              {invoice?.transactionId && <div><span>Transaction ID</span><code style={{fontSize:".8rem",color:"#58a6ff"}}>{invoice.transactionId}</code></div>}
+              {invoice?.depositAddress && <div><span>Crypto Address</span><code style={{fontSize:".78rem",color:"#58a6ff",wordBreak:"break-all"}}>{invoice.depositAddress}</code></div>}
+              {invoice?.expectedCryptoAmount && <div><span>Crypto Amount</span><strong>{invoice.expectedCryptoAmount}</strong></div>}
+            </div>
+          </div>
+
+          <div className="od-card">
+            <h3><UserCircle className="h-4 w-4" /> Customer Information</h3>
+            <div className="od-info-list">
+              <div><span>Email</span><strong>{customerEmail}</strong></div>
+              <div><span>Customer Since</span><strong>{dateStr}</strong></div>
+            </div>
+          </div>
+
+          <div className="od-card">
+            <h3><Timer className="h-4 w-4" /> Order Timeline</h3>
+            <div className="od-timeline">
+              <div className="od-timeline-item">
+                <span className="od-timeline-dot green"></span>
+                <div><strong>Order Placed</strong><p>{dateStr} at {timeStr}</p></div>
+              </div>
+              {isDelivered && (
+                <div className="od-timeline-item">
+                  <span className="od-timeline-dot green"></span>
+                  <div><strong>Order Delivered</strong><p>{dateStr} at {timeStr}</p></div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DashboardPage() {
   const route = useRouteContext();
   const LOGO = "https://res.cloudinary.com/db4mpxc2k/image/upload/v1778619521/Zyvolalogo_yecrow.png";
@@ -1519,6 +1707,7 @@ function DashboardPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState("home");
+  const [selectedOrder, setSelectedOrder] = useState(null);
   const [resendTimer, setResendTimer] = useState(0);
 
   useEffect(() => {
@@ -1738,39 +1927,44 @@ function DashboardPage() {
                 <p>View and manage your order history.</p>
               </div>
               {paidOrders.length > 0 ? (
-                <div className="cd-orders-table">
-                  <div className="cd-table-header">
-                    <span>ORDER</span><span>PRODUCTS</span><span>DATE</span><span>AMOUNT</span><span>STATUS</span>
-                  </div>
-                  {[...paidOrders].reverse().map(order => {
-                    const inv = (data.invoices || []).find(i => i.id === order.invoiceId);
-                    const items = typeof order.items === "string" ? JSON.parse(order.items) : (order.items || []);
-                    const deliveryItems = typeof order.deliveryItems === "string" ? JSON.parse(order.deliveryItems) : (order.deliveryItems || []);
-                    const date = new Date(order.createdAt);
-                    const daysAgo = Math.floor((Date.now() - date.getTime()) / 86400000);
-                    const agoText = daysAgo === 0 ? "today" : daysAgo === 1 ? "1d ago" : `${daysAgo}d ago`;
-                    return (
-                      <div className="cd-table-row" key={order.id}>
-                        <div className="cd-order-id-cell">
-                          <CheckCircle2 className="h-5 w-5 text-green-400" />
-                          <div>
-                            <span className="cd-order-id">{order.id}</span>
-                            <span className="cd-order-sub">{agoText}</span>
-                          </div>
-                        </div>
-                        <div className="cd-order-products">
-                          <span className="cd-product-name">{items.map(i => i.name).join(", ")}</span>
-                          <span className="cd-product-detail">{items.map(i => `${i.name} × ${i.quantity}`).join(", ")}</span>
-                        </div>
-                        <span className="cd-order-date">{date.toLocaleDateString("en-GB")}<br/><small>{date.toLocaleTimeString("en-GB", {hour:"2-digit",minute:"2-digit"})}</small></span>
-                        <span className="cd-order-amount">{money(inv?.totalUsd || order.totalUsd)}</span>
-                        <span className={`cd-status ${order.status === "completed" ? "delivered" : order.status === "cancelled" ? "cancelled" : ""}`}>
-                          <CheckCircle2 className="h-3.5 w-3.5" /> {order.status === "completed" ? "Delivered" : order.status}
-                        </span>
+                <>
+                  {!selectedOrder ? (
+                    <div className="cd-orders-table">
+                      <div className="cd-table-header">
+                        <span>ORDER</span><span>PRODUCTS</span><span>DATE</span><span>AMOUNT</span><span>STATUS</span>
                       </div>
-                    );
-                  })}
-                </div>
+                      {[...paidOrders].reverse().map(order => {
+                        const inv = (data.invoices || []).find(i => i.id === order.invoiceId);
+                        const items = typeof order.items === "string" ? JSON.parse(order.items) : (order.items || []);
+                        const date = new Date(order.createdAt);
+                        const daysAgo = Math.floor((Date.now() - date.getTime()) / 86400000);
+                        const agoText = daysAgo === 0 ? "today" : daysAgo === 1 ? "1d ago" : `${daysAgo}d ago`;
+                        return (
+                          <div className="cd-table-row" key={order.id} onClick={() => setSelectedOrder(order)} style={{cursor:"pointer"}}>
+                            <div className="cd-order-id-cell">
+                              <CheckCircle2 className="h-5 w-5 text-green-400" />
+                              <div>
+                                <span className="cd-order-id">{order.id}</span>
+                                <span className="cd-order-sub">{agoText}</span>
+                              </div>
+                            </div>
+                            <div className="cd-order-products">
+                              <span className="cd-product-name">{items.map(i => i.name).join(", ")}</span>
+                              <span className="cd-product-detail">{items.map(i => `${i.name} × ${i.quantity}`).join(", ")}</span>
+                            </div>
+                            <span className="cd-order-date">{date.toLocaleDateString("en-GB")}<br/><small>{date.toLocaleTimeString("en-GB", {hour:"2-digit",minute:"2-digit"})}</small></span>
+                            <span className="cd-order-amount">{money(inv?.totalUsd || order.totalUsd)}</span>
+                            <span className={`cd-status ${order.status === "completed" ? "delivered" : order.status === "cancelled" ? "cancelled" : ""}`}>
+                              <CheckCircle2 className="h-3.5 w-3.5" /> {order.status === "completed" ? "Delivered" : order.status}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <OrderDetailView order={selectedOrder} invoice={(data.invoices || []).find(i => i.id === selectedOrder.invoiceId)} customerEmail={email} onBack={() => setSelectedOrder(null)} />
+                  )}
+                </>
               ) : (
                 <div className="cd-empty">
                   <Package className="h-10 w-10 text-slate-500" />
@@ -1858,7 +2052,7 @@ const adminNavItems = [
 
 function AdminPage({ section }) {
   const [token, setToken] = useState(localStorage.getItem(ADMIN_TOKEN_KEY) || "");
-  const [login, setLogin] = useState({ email: "crownshoptn@gmail.com", password: "" });
+  const [login, setLogin] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [data, setData] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -1884,9 +2078,15 @@ function AdminPage({ section }) {
           ? "/admin/orders"
           : section === "invoices"
             ? "/admin/invoices"
-            : section === "settings"
-              ? "/admin/settings"
-              : "/admin/summary";
+            : section === "customers"
+              ? "/admin/customers"
+              : section === "coupons"
+                ? "/admin/coupons"
+                : section === "reviews"
+                  ? "/admin/reviews"
+                  : section === "settings"
+                    ? "/admin/settings"
+                    : "/admin/summary";
     api(path, { headers }).then(setData).catch((err) => setError(err.message));
   }, [section, token, reloadKey]);
   if (!token) {
@@ -2116,13 +2316,19 @@ function AdminContent({ section, data, headers, onChange }) {
     return <AdminInvoices data={data} headers={headers} onChange={onChange} />;
   }
   if (section === "orders") {
-    return <AdminOrders data={data} />;
+    return <AdminOrders data={data} headers={headers} onChange={onChange} />;
   }
   if (section === "settings") {
     return <AdminSettings data={data} headers={headers} onChange={onChange} />;
   }
-  if (["customers", "coupons", "reviews"].includes(section)) {
-    return <AdminPlaceholder section={section} />;
+  if (section === "customers") {
+    return <AdminCustomers data={data} headers={headers} onChange={onChange} />;
+  }
+  if (section === "coupons") {
+    return <AdminCoupons data={data} headers={headers} onChange={onChange} />;
+  }
+  if (section === "reviews") {
+    return <AdminReviews data={data} headers={headers} onChange={onChange} />;
   }
   const lowStock = data.lowStock || [];
   return (
@@ -2181,50 +2387,331 @@ function AdminMiniRows({ rows, empty }) {
   );
 }
 
-function AdminOrders({ data }) {
+function AdminOrders({ data, headers, onChange }) {
   const orders = Array.isArray(data) ? data : [];
+  const [viewOrder, setViewOrder] = useState(null);
+  const [message, setMessage] = useState("");
+  const [search, setSearch] = useState("");
+  const filtered = search ? orders.filter(o => (o.id + (o.customerEmail || "")).toLowerCase().includes(search.toLowerCase())) : orders;
   const stats = [
-    ["Total Orders", orders.length, ShoppingCart],
-    ["Paid Orders", orders.filter((o) => o.status === "paid").length, CheckCircle2],
-    ["Pending Orders", orders.filter((o) => o.status === "pending").length, Timer],
-    ["Failed Orders", orders.filter((o) => ["failed", "refunded"].includes(o.status)).length, AlertTriangle]
+    ["Total", orders.length, ShoppingCart],
+    ["Completed", orders.filter(o => o.status === "completed").length, CheckCircle2],
+    ["Pending", orders.filter(o => o.status === "pending").length, Timer],
+    ["Failed", orders.filter(o => ["failed", "refunded"].includes(o.status)).length, AlertTriangle]
   ];
+  const resendDelivery = async (order) => {
+    try {
+      await api(`/admin/orders/${order.id}/resend`, { method: "POST", body: "{}", headers });
+      setMessage(`Delivery email resent for ${order.id}`);
+    } catch (err) { setMessage(err.message); }
+  };
   return (
     <div className="admin-content-stack">
       <AdminPageHeader section="orders" title="Orders" subtitle="Track purchases, delivery status, and customer activity." />
       <div className="admin-stat-grid compact">
-        {stats.map(([label, value, Icon]) => <AdminStatCard key={label} icon={Icon} label={label} value={value} text="Order state" />)}
+        {stats.map(([label, value, Icon]) => <AdminStatCard key={label} icon={Icon} label={label} value={value} text="" />)}
       </div>
-      <AdminPanel title="Order Ledger" text="Every completed checkout should create a delivery-aware order record." icon={ShoppingCart}>
+      {message && <AdminNotice message={message} tone="success" />}
+
+      {viewOrder && (
+        <div className="admin-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setViewOrder(null); }}>
+          <div className="admin-modal" style={{maxWidth:"620px"}}>
+            <div className="admin-modal-header">
+              <h2>Order Details</h2>
+              <button className="admin-modal-close" onClick={() => setViewOrder(null)}>×</button>
+            </div>
+            <div className="admin-modal-body" style={{display:"grid",gap:".75rem"}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:".5rem",fontSize:".85rem"}}>
+                <div><span style={{color:"#6b7280"}}>Order ID</span><br/><strong style={{color:"#f0f6ff"}}>{viewOrder.id}</strong></div>
+                <div><span style={{color:"#6b7280"}}>Customer</span><br/><strong style={{color:"#f0f6ff"}}>{viewOrder.customerEmail}</strong></div>
+                <div><span style={{color:"#6b7280"}}>Total</span><br/><strong style={{color:"#f0f6ff"}}>{money(viewOrder.totalUsd || 0)}</strong></div>
+                <div><span style={{color:"#6b7280"}}>Status</span><br/><StatusBadge status={viewOrder.status} /></div>
+                <div style={{gridColumn:"1/-1"}}><span style={{color:"#6b7280"}}>Created</span><br/><strong style={{color:"#f0f6ff"}}>{formatAdminDate(viewOrder.createdAt)}</strong></div>
+              </div>
+              <div style={{borderTop:"1px solid rgba(255,255,255,0.06)",paddingTop:".75rem"}}>
+                <p style={{color:"#6b7280",fontSize:".75rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:".5rem"}}>Delivery Items</p>
+                {(viewOrder.deliveryItems || []).map((item, i) => (
+                  <div key={i} style={{border:"1px solid rgba(255,255,255,0.06)",borderRadius:"10px",background:"rgba(255,255,255,0.02)",padding:".7rem",marginBottom:".4rem"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:".35rem"}}><strong style={{color:"#f0f6ff",fontSize:".85rem"}}>{item.name}</strong><span style={{color:"#6b7280",fontSize:".75rem"}}>{item.deliveryType || "auto"}</span></div>
+                    {(item.delivered || []).map((val, j) => (
+                      <div key={j} style={{display:"flex",alignItems:"center",gap:".4rem",background:"#0d1117",border:"1px solid rgba(255,255,255,0.06)",borderRadius:"6px",padding:".4rem .6rem",marginBottom:".25rem"}}>
+                        <code style={{flex:1,fontSize:".8rem",wordBreak:"break-all",color:"#58a6ff"}}>{val}</code>
+                        <button className="small-btn" onClick={() => { navigator.clipboard?.writeText(val); setMessage("Copied!"); }}><Copy className="h-3 w-3" /></button>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+                {!(viewOrder.deliveryItems || []).length && <p style={{color:"#484f58",fontSize:".85rem"}}>No delivery items recorded.</p>}
+              </div>
+            </div>
+            <div className="admin-modal-footer">
+              <button className="small-btn" onClick={() => resendDelivery(viewOrder)}><Mail className="h-3.5 w-3.5" /> Resend Email</button>
+              <button className="small-btn" onClick={() => setViewOrder(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <AdminPanel title="Order Ledger" text="" icon={ShoppingCart} action={
+        <div style={{display:"flex",alignItems:"center",gap:".5rem"}}>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search orders..." style={{padding:".4rem .65rem",border:"1px solid rgba(255,255,255,0.08)",borderRadius:"8px",background:"#161b22",color:"#f0f6ff",fontSize:".82rem",width:"200px"}} />
+        </div>
+      }>
         <div className="admin-table order-table">
-          <div className="admin-table-head"><span>Order ID</span><span>Customer Email</span><span>Product</span><span>Total</span><span>Payment</span><span>Status</span><span>Delivery</span><span>Created</span><span>Actions</span></div>
-          {orders.map((order) => (
+          <div className="admin-table-head"><span>Order ID</span><span>Customer</span><span>Product</span><span>Total</span><span>Status</span><span>Date</span><span>Actions</span></div>
+          {filtered.map((order) => (
             <div className="admin-table-row" key={order.id}>
-              <strong>{order.id}</strong>
-              <span>{order.customerEmail || order.email || "Unknown"}</span>
-              <span>{order.product || order.products?.join(", ") || order.deliveryItems?.[0]?.name || "Digital product"}</span>
+              <strong>{order.id.slice(0, 18)}</strong>
+              <span>{order.customerEmail || "Unknown"}</span>
+              <span>{order.deliveryItems?.[0]?.name || "Digital product"}{order.deliveryItems?.length > 1 ? ` +${order.deliveryItems.length - 1}` : ""}</span>
               <strong>{money(order.totalUsd || order.total || 0)}</strong>
-              <span>{order.paymentMethod || order.selectedCoin || "Balance"}</span>
               <StatusBadge status={order.status || "pending"} />
-              <StatusBadge status={order.deliveryStatus || (order.status === "paid" ? "delivered" : "queued")} />
               <span>{formatAdminDate(order.createdAt)}</span>
-              <div className="admin-row-actions"><button className="small-btn">View</button><button className="small-btn">Resend</button><button className="small-btn">Mark delivered</button></div>
+              <div className="admin-row-actions">
+                <button className="small-btn" onClick={() => setViewOrder(order)}>View</button>
+                <button className="small-btn" onClick={() => resendDelivery(order)}><Mail className="h-3 w-3" /></button>
+              </div>
             </div>
           ))}
-          {!orders.length && <AdminEmptyState icon={ShoppingCart} title="No orders yet" text="Orders will appear here when customers complete checkout." />}
+          {!filtered.length && <AdminEmptyState icon={ShoppingCart} title="No orders found" text={search ? "No matching orders." : "Orders will appear here when customers complete checkout."} />}
         </div>
       </AdminPanel>
     </div>
   );
 }
 
-function AdminPlaceholder({ section }) {
-  const title = adminLabel(section);
+function AdminCustomers({ data, headers, onChange }) {
+  const customers = Array.isArray(data) ? data : [];
+  const [editCustomer, setEditCustomer] = useState(null);
+  const [balanceInput, setBalanceInput] = useState("");
+  const [message, setMessage] = useState("");
+  const [search, setSearch] = useState("");
+  const filtered = search ? customers.filter(c => (c.email || "").toLowerCase().includes(search.toLowerCase())) : customers;
+  const saveBalance = async () => {
+    try {
+      await api(`/admin/customers/${encodeURIComponent(editCustomer.email)}/balance`, { method: "PUT", body: JSON.stringify({ balance: Number(balanceInput) }), headers });
+      setMessage(`Balance updated for ${editCustomer.email}`);
+      setEditCustomer(null);
+      onChange();
+    } catch (err) { setMessage(err.message); }
+  };
   return (
     <div className="admin-content-stack">
-      <AdminPageHeader section={section} title={title} subtitle={`${title} controls are ready for backend wiring.`} />
-      <AdminPanel title={`${title} Manager`} text="This section is styled and reserved for the next backend endpoints." icon={Settings}>
-        <AdminEmptyState icon={Settings} title={`${title} module ready`} text="Connect the API and this area can show tables, filters, and actions without redesigning the layout." />
+      <AdminPageHeader section="customers" title="Customers" subtitle="View accounts and manage store credit." />
+      <div className="admin-stat-grid compact">
+        <AdminStatCard icon={UserCircle} label="Total" value={customers.length} text="" />
+        <AdminStatCard icon={Wallet} label="Credit Outstanding" value={money(customers.reduce((s, c) => s + Number(c.balance || 0), 0))} text="" />
+      </div>
+      {message && <AdminNotice message={message} tone="success" />}
+
+      {editCustomer && (
+        <div className="admin-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setEditCustomer(null); }}>
+          <div className="admin-modal" style={{maxWidth:"400px"}}>
+            <div className="admin-modal-header">
+              <h2>Edit Balance</h2>
+              <button className="admin-modal-close" onClick={() => setEditCustomer(null)}>×</button>
+            </div>
+            <div className="admin-modal-body">
+              <p style={{color:"#8b949e",fontSize:".85rem",marginBottom:".75rem"}}>{editCustomer.email}</p>
+              <label className="field"><span>Store Credit Balance (€)</span><input type="number" step="0.01" value={balanceInput} onChange={(e) => setBalanceInput(e.target.value)} /></label>
+            </div>
+            <div className="admin-modal-footer">
+              <button className="small-btn" onClick={() => setEditCustomer(null)}>Cancel</button>
+              <button className="primary-btn" onClick={saveBalance}>Save Balance</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <AdminPanel title="Customers" text="" icon={UserCircle} action={
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by email..." style={{padding:".4rem .65rem",border:"1px solid rgba(255,255,255,0.08)",borderRadius:"8px",background:"#161b22",color:"#f0f6ff",fontSize:".82rem",width:"200px"}} />
+      }>
+        <div className="admin-table">
+          <div className="admin-table-head" style={{gridTemplateColumns:"1.5fr 90px 120px 120px auto"}}><span>Email</span><span>Balance</span><span>Last Order</span><span>Joined</span><span>Actions</span></div>
+          {filtered.map((c) => (
+            <div className="admin-table-row" key={c.email || c.id} style={{gridTemplateColumns:"1.5fr 90px 120px 120px auto"}}>
+              <strong>{c.email}</strong>
+              <span style={{color:"#4ade80",fontWeight:700}}>{money(Number(c.balance || 0))}</span>
+              <span>{formatAdminDate(c.last_order_at)}</span>
+              <span>{formatAdminDate(c.created_at)}</span>
+              <div className="admin-row-actions">
+                <button className="small-btn" onClick={() => { setEditCustomer(c); setBalanceInput(String(c.balance || 0)); }}><Wallet className="h-3 w-3" /> Edit</button>
+              </div>
+            </div>
+          ))}
+          {!filtered.length && <AdminEmptyState icon={UserCircle} title="No customers found" text={search ? "No matching customers." : "Customers appear after their first checkout."} />}
+        </div>
+      </AdminPanel>
+    </div>
+  );
+}
+
+function AdminCoupons({ data, headers, onChange }) {
+  const coupons = Array.isArray(data) ? data : [];
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState({ code: "", type: "percent", value: "", expiresAt: "2026-12-31" });
+  const [editId, setEditId] = useState(null);
+  const [message, setMessage] = useState("");
+  const openNew = () => { setEditId(null); setForm({ code: "", type: "percent", value: "", expiresAt: "2026-12-31" }); setShowModal(true); };
+  const openEdit = (c) => { setEditId(c.id); setForm({ code: c.code, type: c.type, value: String(c.value), expiresAt: c.expires_at ? c.expires_at.slice(0, 10) : "2026-12-31" }); setShowModal(true); };
+  const closeModal = () => { setShowModal(false); setEditId(null); };
+  const submitCoupon = async () => {
+    try {
+      if (editId) {
+        await api(`/admin/coupons/${editId}`, { method: "PUT", body: JSON.stringify({ ...form, value: Number(form.value), active: true, expiresAt: form.expiresAt + " 23:59:59" }), headers });
+        setMessage("Coupon updated!");
+      } else {
+        await api("/admin/coupons", { method: "POST", body: JSON.stringify({ ...form, value: Number(form.value), active: true, expiresAt: form.expiresAt + " 23:59:59" }), headers });
+        setMessage("Coupon created!");
+      }
+      closeModal();
+      onChange();
+    } catch (err) { setMessage(err.message); }
+  };
+  const toggleActive = async (coupon) => {
+    try {
+      await api(`/admin/coupons/${coupon.id}`, { method: "PUT", body: JSON.stringify({ active: !coupon.active }), headers });
+      onChange();
+    } catch (err) { setMessage(err.message); }
+  };
+  const remove = async (id) => {
+    if (!confirm("Delete this coupon?")) return;
+    try { await api(`/admin/coupons/${id}`, { method: "DELETE", headers }); onChange(); } catch (err) { setMessage(err.message); }
+  };
+  return (
+    <div className="admin-content-stack">
+      <AdminPageHeader section="coupons" title="Coupons" subtitle="Create and manage discount codes." />
+      <div className="admin-stat-grid compact">
+        <AdminStatCard icon={BadgeDollarSign} label="Total" value={coupons.length} text="" />
+        <AdminStatCard icon={CheckCircle2} label="Active" value={coupons.filter(c => c.active).length} text="" />
+      </div>
+      {message && <AdminNotice message={message} tone="success" />}
+
+      {showModal && (
+        <div className="admin-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}>
+          <div className="admin-modal" style={{maxWidth:"480px"}}>
+            <div className="admin-modal-header">
+              <h2>{editId ? "Edit Coupon" : "New Coupon"}</h2>
+              <button className="admin-modal-close" onClick={closeModal}>×</button>
+            </div>
+            <div className="admin-modal-body">
+              <div className="admin-form">
+                <label className="field"><span>Code</span><input value={form.code} onChange={(e) => setForm({...form, code: e.target.value.toUpperCase()})} placeholder="SUMMER20" /></label>
+                <label className="field"><span>Type</span><select value={form.type} onChange={(e) => setForm({...form, type: e.target.value})}><option value="percent">Percentage (%)</option><option value="fixed">Fixed (€)</option></select></label>
+                <label className="field"><span>Value</span><input type="number" value={form.value} onChange={(e) => setForm({...form, value: e.target.value})} placeholder="10" /></label>
+                <label className="field"><span>Expires</span><input type="date" value={form.expiresAt} onChange={(e) => setForm({...form, expiresAt: e.target.value})} /></label>
+              </div>
+            </div>
+            <div className="admin-modal-footer">
+              <button className="small-btn" onClick={closeModal}>Cancel</button>
+              <button className="primary-btn" onClick={submitCoupon}>{editId ? "Update" : "Create"} Coupon</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <AdminPanel title="Coupons" text="" icon={BadgeDollarSign} action={
+        <button className="primary-btn" onClick={openNew}><Plus className="h-4 w-4" /> New Coupon</button>
+      }>
+        <div className="admin-table">
+          <div className="admin-table-head" style={{gridTemplateColumns:"1fr 90px 80px 80px 120px auto"}}><span>Code</span><span>Type</span><span>Value</span><span>Status</span><span>Expires</span><span>Actions</span></div>
+          {coupons.map((c) => (
+            <div className="admin-table-row" key={c.id} style={{gridTemplateColumns:"1fr 90px 80px 80px 120px auto"}}>
+              <strong>{c.code}</strong>
+              <span>{c.type === "percent" ? "%" : "Fixed"}</span>
+              <span>{c.type === "percent" ? `${c.value}%` : `€${c.value}`}</span>
+              <StatusBadge status={c.active ? "active" : "expired"} />
+              <span>{formatAdminDate(c.expires_at)}</span>
+              <div className="admin-row-actions">
+                <button className="small-btn" onClick={() => openEdit(c)}>Edit</button>
+                <button className="small-btn" onClick={() => toggleActive(c)}>{c.active ? "Disable" : "Enable"}</button>
+                <button className="small-btn danger" onClick={() => remove(c.id)}><Trash2 className="h-3 w-3" /></button>
+              </div>
+            </div>
+          ))}
+          {!coupons.length && <AdminEmptyState icon={BadgeDollarSign} title="No coupons yet" text="Create your first discount code." />}
+        </div>
+      </AdminPanel>
+    </div>
+  );
+}
+
+function AdminReviews({ data, headers, onChange }) {
+  const reviews = Array.isArray(data) ? data : [];
+  const [filter, setFilter] = useState("all");
+  const [message, setMessage] = useState("");
+  const [viewReview, setViewReview] = useState(null);
+  const filtered = filter === "all" ? reviews : reviews.filter((r) => r.status === filter);
+  const setStatus = async (id, status) => {
+    try {
+      await api(`/admin/reviews/${id}/status`, { method: "PUT", body: JSON.stringify({ status }), headers });
+      setMessage(`Review ${status}`);
+      setViewReview(null);
+      onChange();
+    } catch (err) { setMessage(err.message); }
+  };
+  const remove = async (id) => {
+    if (!confirm("Delete this review?")) return;
+    try { await api(`/admin/reviews/${id}`, { method: "DELETE", headers }); setViewReview(null); onChange(); } catch (err) { setMessage(err.message); }
+  };
+  return (
+    <div className="admin-content-stack">
+      <AdminPageHeader section="reviews" title="Reviews" subtitle="Moderate customer feedback." />
+      <div className="admin-stat-grid compact">
+        <AdminStatCard icon={Star} label="Total" value={reviews.length} text="" />
+        <AdminStatCard icon={CheckCircle2} label="Approved" value={reviews.filter(r => r.status === "approved").length} text="" />
+        <AdminStatCard icon={Timer} label="Pending" value={reviews.filter(r => r.status === "pending").length} text="" />
+      </div>
+      {message && <AdminNotice message={message} tone="success" />}
+
+      {viewReview && (
+        <div className="admin-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setViewReview(null); }}>
+          <div className="admin-modal" style={{maxWidth:"500px"}}>
+            <div className="admin-modal-header">
+              <h2>Review Details</h2>
+              <button className="admin-modal-close" onClick={() => setViewReview(null)}>×</button>
+            </div>
+            <div className="admin-modal-body" style={{display:"grid",gap:".75rem"}}>
+              <div><span style={{color:"#6b7280",fontSize:".82rem"}}>Product</span><br/><strong style={{color:"#f0f6ff"}}>{viewReview.productName || "Unknown"}</strong></div>
+              <div style={{display:"flex",alignItems:"center",gap:".5rem"}}><span style={{color:"#6b7280",fontSize:".82rem"}}>Rating:</span> <Stars rating={viewReview.rating} /></div>
+              <div style={{border:"1px solid rgba(255,255,255,0.06)",borderRadius:"10px",background:"rgba(255,255,255,0.02)",padding:".75rem"}}><p style={{color:"#c9d1d9",fontSize:".88rem",lineHeight:1.6,margin:0}}>{viewReview.text}</p></div>
+              <div style={{display:"flex",gap:"1rem",fontSize:".82rem"}}>
+                <div><span style={{color:"#6b7280"}}>Status:</span> <StatusBadge status={viewReview.status} /></div>
+                <div><span style={{color:"#6b7280"}}>Date:</span> <span style={{color:"#c9d1d9"}}>{formatAdminDate(viewReview.createdAt)}</span></div>
+              </div>
+            </div>
+            <div className="admin-modal-footer">
+              {viewReview.status !== "approved" && <button className="primary-btn" onClick={() => setStatus(viewReview.id, "approved")}>Approve</button>}
+              {viewReview.status !== "rejected" && <button className="small-btn" onClick={() => setStatus(viewReview.id, "rejected")}>Reject</button>}
+              <button className="small-btn danger" onClick={() => remove(viewReview.id)}><Trash2 className="h-3 w-3" /> Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <AdminPanel title="Reviews" text="" icon={Star} action={
+        <div className="admin-filter-tabs">
+          {["all", "pending", "approved", "rejected"].map((f) => <button key={f} className={filter === f ? "active" : ""} onClick={() => setFilter(f)}>{f}</button>)}
+        </div>
+      }>
+        <div className="admin-table">
+          <div className="admin-table-head" style={{gridTemplateColumns:"1fr 80px 1.5fr 80px 110px auto"}}><span>Product</span><span>Rating</span><span>Review</span><span>Status</span><span>Date</span><span>Actions</span></div>
+          {filtered.map((r) => (
+            <div className="admin-table-row" key={r.id} style={{gridTemplateColumns:"1fr 80px 1.5fr 80px 110px auto"}}>
+              <strong>{r.productName || "Unknown"}</strong>
+              <span><Stars rating={r.rating} /></span>
+              <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:"#8b949e"}}>{r.text}</span>
+              <StatusBadge status={r.status} />
+              <span>{formatAdminDate(r.createdAt)}</span>
+              <div className="admin-row-actions">
+                <button className="small-btn" onClick={() => setViewReview(r)}>View</button>
+                {r.status !== "approved" && <button className="small-btn" onClick={() => setStatus(r.id, "approved")}>Approve</button>}
+                {r.status !== "rejected" && <button className="small-btn" onClick={() => setStatus(r.id, "rejected")}>Reject</button>}
+              </div>
+            </div>
+          ))}
+          {!filtered.length && <AdminEmptyState icon={Star} title="No reviews found" text="Customer reviews will appear here after purchases." />}
+        </div>
       </AdminPanel>
     </div>
   );
@@ -2234,51 +2721,95 @@ function AdminInvoices({ data, headers, onChange }) {
   const source = Array.isArray(data) ? data : [];
   const [filter, setFilter] = useState("all");
   const [message, setMessage] = useState("");
-  const filtered = filter === "all" ? source : source.filter((inv) => inv.status === filter);
+  const [viewInv, setViewInv] = useState(null);
+  const [search, setSearch] = useState("");
+  const byStatus = filter === "all" ? source : source.filter((inv) => inv.status === filter);
+  const filtered = search ? byStatus.filter(inv => (inv.id + (inv.customerEmail || "")).toLowerCase().includes(search.toLowerCase())) : byStatus;
   const markPaid = async (id) => {
     try {
       await api(`/admin/invoices/${id}/mark-paid`, { method: "POST", body: "{}", headers });
       setMessage(`Invoice ${id} marked as paid!`);
+      setViewInv(null);
       onChange();
     } catch (err) { setMessage(err.message); }
   };
-  const counts = ["pending", "detected", "confirming", "paid", "expired", "underpaid"].map((status) => [status, source.filter((inv) => inv.status === status).length]);
+  const counts = ["pending", "detected", "confirming", "paid", "expired", "underpaid"].map((s) => [s, source.filter((inv) => inv.status === s).length]);
   return (
     <div className="admin-content-stack">
-      <AdminPageHeader section="invoices" title="Invoices" subtitle="Monitor crypto invoices, payment confirmations, and delivery triggers." />
+      <AdminPageHeader section="invoices" title="Invoices" subtitle="Monitor crypto invoices and payment confirmations." />
       <div className="admin-stat-grid compact">
-        {counts.map(([status, count]) => <AdminStatCard key={status} icon={Wallet} label={status} value={count} text="Invoice state" tone={status} />)}
+        {counts.map(([status, count]) => <AdminStatCard key={status} icon={Wallet} label={status} value={count} text="" />)}
       </div>
       {message && <AdminNotice message={message} tone="success" />}
-      <AdminPanel title="Invoice Ledger" text="Blockchain addresses are matched to invoices server-side." icon={Wallet} action={
-        <div className="admin-filter-tabs">
-          {["all", "pending", "detected", "confirming", "paid", "expired", "underpaid"].map((f) => <button key={f} className={filter === f ? "active" : ""} onClick={() => setFilter(f)}>{f}</button>)}
+
+      {viewInv && (
+        <div className="admin-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setViewInv(null); }}>
+          <div className="admin-modal" style={{maxWidth:"580px"}}>
+            <div className="admin-modal-header">
+              <h2>Invoice Details</h2>
+              <button className="admin-modal-close" onClick={() => setViewInv(null)}>×</button>
+            </div>
+            <div className="admin-modal-body" style={{display:"grid",gap:".6rem",fontSize:".85rem"}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:".5rem"}}>
+                <div><span style={{color:"#6b7280"}}>Invoice ID</span><br/><strong style={{color:"#f0f6ff",fontSize:".82rem",wordBreak:"break-all"}}>{viewInv.id}</strong></div>
+                <div><span style={{color:"#6b7280"}}>Customer</span><br/><strong style={{color:"#f0f6ff"}}>{viewInv.customerEmail || "Unknown"}</strong></div>
+                <div><span style={{color:"#6b7280"}}>Coin</span><br/><strong style={{color:"#f0f6ff"}}>{viewInv.selectedCoin || "LTC"}</strong></div>
+                <div><span style={{color:"#6b7280"}}>Status</span><br/><StatusBadge status={viewInv.status} /></div>
+                <div><span style={{color:"#6b7280"}}>Expected Amount</span><br/><code style={{color:"#58a6ff",fontSize:".82rem"}}>{viewInv.expectedCryptoAmount || "0"}</code></div>
+                <div><span style={{color:"#6b7280"}}>Paid Amount</span><br/><code style={{color:"#4ade80",fontSize:".82rem"}}>{viewInv.paidAmount || "0"}</code></div>
+                <div><span style={{color:"#6b7280"}}>Confirmations</span><br/><strong style={{color:"#f0f6ff"}}>{viewInv.confirmations ?? viewInv.confirmationCount ?? 0}</strong></div>
+                <div><span style={{color:"#6b7280"}}>Expires</span><br/><strong style={{color:"#f0f6ff"}}>{formatAdminDate(viewInv.expiresAt)}</strong></div>
+              </div>
+              <div style={{borderTop:"1px solid rgba(255,255,255,0.06)",paddingTop:".6rem"}}>
+                <p style={{color:"#6b7280",fontSize:".75rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:".35rem"}}>Deposit Address</p>
+                <div style={{display:"flex",alignItems:"center",gap:".4rem",background:"#161b22",border:"1px solid rgba(255,255,255,0.06)",borderRadius:"8px",padding:".5rem .7rem"}}>
+                  <code style={{flex:1,fontSize:".8rem",wordBreak:"break-all",color:"#58a6ff"}}>{viewInv.depositAddress || "—"}</code>
+                  <button className="small-btn" onClick={() => { navigator.clipboard?.writeText(viewInv.depositAddress || ""); setMessage("Copied!"); }}><Copy className="h-3 w-3" /></button>
+                </div>
+              </div>
+              {(viewInv.txid || viewInv.transactionId) && (
+                <div>
+                  <p style={{color:"#6b7280",fontSize:".75rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:".35rem"}}>Transaction ID</p>
+                  <div style={{display:"flex",alignItems:"center",gap:".4rem",background:"#161b22",border:"1px solid rgba(255,255,255,0.06)",borderRadius:"8px",padding:".5rem .7rem"}}>
+                    <code style={{flex:1,fontSize:".8rem",wordBreak:"break-all",color:"#58a6ff"}}>{viewInv.txid || viewInv.transactionId}</code>
+                    <button className="small-btn" onClick={() => { navigator.clipboard?.writeText(viewInv.txid || viewInv.transactionId || ""); setMessage("Copied!"); }}><Copy className="h-3 w-3" /></button>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="admin-modal-footer">
+              {viewInv.status !== "paid" && <button className="primary-btn" onClick={() => markPaid(viewInv.id)}>Mark Paid</button>}
+              <button className="small-btn" onClick={() => setViewInv(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <AdminPanel title="Invoices" text="" icon={Wallet} action={
+        <div style={{display:"flex",alignItems:"center",gap:".5rem",flexWrap:"wrap"}}>
+          <div className="admin-filter-tabs">
+            {["all", "pending", "detected", "confirming", "paid", "expired"].map((f) => <button key={f} className={filter === f ? "active" : ""} onClick={() => setFilter(f)}>{f}</button>)}
+          </div>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..." style={{padding:".4rem .65rem",border:"1px solid rgba(255,255,255,0.08)",borderRadius:"8px",background:"#161b22",color:"#f0f6ff",fontSize:".82rem",width:"160px"}} />
         </div>
       }>
-        <div className="admin-table invoice-table">
-          <div className="admin-table-head">
-            <span>Invoice ID</span><span>Customer</span><span>Coin</span><span>Expected</span><span>Paid</span><span>Address</span><span>Conf.</span><span>Status</span><span>Expires</span><span>TXID</span><span>Actions</span>
-          </div>
+        <div className="admin-table">
+          <div className="admin-table-head" style={{gridTemplateColumns:"110px 1.2fr 60px 100px 80px 80px auto",minWidth:"700px"}}><span>Invoice</span><span>Customer</span><span>Coin</span><span>Expected</span><span>Status</span><span>Date</span><span>Actions</span></div>
           {filtered.map((inv) => (
-            <div className="admin-table-row" key={inv.id}>
-              <strong>{inv.id}</strong>
-              <span>{inv.customerEmail || inv.customer || "Unknown"}</span>
-              <span>{inv.selectedCoin || inv.coin || "LTC"}</span>
-              <span>{inv.expectedCryptoAmount || inv.expectedAmount || "0.00000000"}</span>
-              <span>{inv.paidAmount || "0"}</span>
-              <code>{clip(inv.depositAddress || inv.address, 16)}</code>
-              <span>{inv.confirmations ?? inv.confirmationCount ?? 0}</span>
+            <div className="admin-table-row" key={inv.id} style={{gridTemplateColumns:"110px 1.2fr 60px 100px 80px 80px auto",minWidth:"700px"}}>
+              <strong style={{fontSize:".78rem"}}>{inv.id.slice(0, 14)}...</strong>
+              <span>{inv.customerEmail || "Unknown"}</span>
+              <span>{inv.selectedCoin || "LTC"}</span>
+              <code>{(inv.expectedCryptoAmount || "0").slice(0, 12)}</code>
               <StatusBadge status={inv.status} />
-              <span>{formatAdminDate(inv.expiresAt || inv.expirationDate)}</span>
-              <code>{clip(inv.txid || inv.transactionId, 12)}</code>
+              <span>{formatAdminDate(inv.expiresAt)}</span>
               <div className="admin-row-actions">
-                <button className="small-btn">View</button>
-                <button className="small-btn" onClick={() => navigator.clipboard?.writeText(inv.depositAddress || inv.address || "")}><Copy className="h-3.5 w-3.5" /></button>
-                <button className="small-btn" onClick={() => markPaid(inv.id)}>Mark paid</button>
+                <button className="small-btn" onClick={() => setViewInv(inv)}>View</button>
+                {inv.status !== "paid" && <button className="small-btn" onClick={() => markPaid(inv.id)}>Pay</button>}
               </div>
             </div>
           ))}
-          {!filtered.length && <AdminEmptyState icon={Wallet} title="No invoices found" text="Crypto invoices will appear here after checkout starts." />}
+          {!filtered.length && <AdminEmptyState icon={Wallet} title="No invoices found" text="Invoices appear after checkout starts." />}
         </div>
       </AdminPanel>
     </div>
@@ -2287,19 +2818,28 @@ function AdminInvoices({ data, headers, onChange }) {
 
 function AdminSettings({ data, headers, onChange }) {
   const [tab, setTab] = useState("General");
+  const wallets = data.walletAddresses || {};
   const [form, setForm] = useState({
     storeName: data.storeName || "Zyvory Market",
     domain: data.domain || "zyvory.xyz",
     defaultCurrency: data.defaultCurrency || "EUR",
     timezone: data.timezone || "Africa/Lagos",
     discordInvite: data.discordInvite || "",
-    ltcAddress: (data.walletAddresses || {}).LTC || "",
-    btcAddress: (data.walletAddresses || {}).BTC || "",
-    solAddress: (data.walletAddresses || {}).SOL || "",
-    ethAddress: (data.walletAddresses || {}).ETH || ""
+    paypalEmail: data.paypalEmail || "",
+    ltcAddress: wallets.LTC || "",
+    btcAddress: wallets.BTC || "",
+    solAddress: wallets.SOL || "",
+    ethAddress: wallets.ETH || "",
+    enabledCoins: data.enabledCoins || ["LTC", "BTC", "SOL", "ETH"],
+    invoiceExpirationMins: data.invoiceExpirationMins || 60,
+    discordWebhookUrl: data.discordWebhookUrl || "",
+    accentColor: data.accentColor || "#00D9FF"
   });
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const toggleCoin = (coin) => {
+    setForm(f => ({ ...f, enabledCoins: f.enabledCoins.includes(coin) ? f.enabledCoins.filter(c => c !== coin) : [...f.enabledCoins, coin] }));
+  };
   const save = async (e) => {
     e.preventDefault();
     setMessage(""); setError("");
@@ -2309,7 +2849,15 @@ function AdminSettings({ data, headers, onChange }) {
         headers,
         body: JSON.stringify({
           storeName: form.storeName,
+          domain: form.domain,
+          defaultCurrency: form.defaultCurrency,
+          timezone: form.timezone,
           discordInvite: form.discordInvite,
+          paypalEmail: form.paypalEmail,
+          enabledCoins: form.enabledCoins,
+          invoiceExpirationMins: Number(form.invoiceExpirationMins),
+          discordWebhookUrl: form.discordWebhookUrl,
+          accentColor: form.accentColor,
           walletAddresses: {
             LTC: form.ltcAddress,
             BTC: form.btcAddress,
@@ -2322,12 +2870,12 @@ function AdminSettings({ data, headers, onChange }) {
       onChange();
     } catch (err) { setError(err.message); }
   };
-  const tabs = ["General", "Payments", "Crypto Wallets", "Discord Webhooks", "Email SMTP", "Security", "Branding"];
+  const tabs = ["General", "Payments", "Crypto Wallets", "Notifications"];
   return (
     <div className="admin-content-stack">
-      <AdminPageHeader section="settings" title="Settings" subtitle="Configure storefront, payments, wallets, Discord, email, security, and branding." />
+      <AdminPageHeader section="settings" title="Settings" subtitle="Configure storefront, payments, wallets, and notifications." />
       {(message || error) && <AdminNotice message={message || error} tone={error ? "error" : "success"} />}
-      <AdminPanel title="Store Settings" text="Sensitive secrets belong on the server only. Keep wallet/API credentials out of frontend code." icon={Settings}>
+      <AdminPanel title="Store Settings" text="Wallet addresses and API keys are saved in the database. SMTP/Resend credentials are set via server environment variables." icon={Settings}>
         <div className="settings-tabs">{tabs.map((item) => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{item}</button>)}</div>
         <form className="admin-form settings-form" onSubmit={save}>
           {tab === "General" && <>
@@ -2336,41 +2884,24 @@ function AdminSettings({ data, headers, onChange }) {
             <AdminField label="Support Discord URL"><input value={form.discordInvite} onChange={(e) => setForm({ ...form, discordInvite: e.target.value })} /></AdminField>
             <AdminField label="Default currency"><select value={form.defaultCurrency} onChange={(e) => setForm({ ...form, defaultCurrency: e.target.value })}>{CURRENCIES.map((c) => <option key={c.code}>{c.code}</option>)}</select></AdminField>
             <AdminField label="Timezone"><input value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })} /></AdminField>
+            <AdminField label="Accent color"><input value={form.accentColor} onChange={(e) => setForm({ ...form, accentColor: e.target.value })} /></AdminField>
           </>}
           {tab === "Payments" && <>
-            {["LTC", "BTC", "SOL", "ETH"].map((coin) => <label className="admin-toggle" key={coin}><span>{coin}</span><input type="checkbox" defaultChecked /></label>)}
-            <AdminField label="Invoice expiration minutes"><input type="number" defaultValue="15" /></AdminField>
-            <AdminField label="Confirmation requirements"><input defaultValue="LTC: 2, BTC: 1, SOL: 1, ETH: 12" /></AdminField>
-            <AdminField label="Minimum payment amount"><input type="number" defaultValue="1" /></AdminField>
+            <p style={{fontSize:"0.8rem",color:"#8b949e",margin:"0 0 0.75rem"}}>Toggle which payment methods are available at checkout.</p>
+            {["LTC", "BTC", "SOL", "ETH"].map((coin) => <label className="admin-toggle" key={coin}><span>{coin}</span><input type="checkbox" checked={form.enabledCoins.includes(coin)} onChange={() => toggleCoin(coin)} /></label>)}
+            <AdminField label="PayPal email (Friends & Family)" help="Leave empty to disable PayPal."><input value={form.paypalEmail} onChange={(e) => setForm({ ...form, paypalEmail: e.target.value })} placeholder="paypal@example.com" /></AdminField>
+            <AdminField label="Invoice expiration (minutes)"><input type="number" value={form.invoiceExpirationMins} onChange={(e) => setForm({ ...form, invoiceExpirationMins: e.target.value })} /></AdminField>
           </>}
           {tab === "Crypto Wallets" && <>
+            <p style={{fontSize:"0.8rem",color:"#8b949e",margin:"0 0 0.75rem"}}>Fallback addresses used when address pools are empty. Pools are configured via server env vars.</p>
             <AdminField label="Litecoin (LTC) Address" wide><input value={form.ltcAddress} onChange={(e) => setForm({ ...form, ltcAddress: e.target.value })} /></AdminField>
             <AdminField label="Bitcoin (BTC) Address" wide><input value={form.btcAddress} onChange={(e) => setForm({ ...form, btcAddress: e.target.value })} /></AdminField>
             <AdminField label="Solana (SOL) Address" wide><input value={form.solAddress} onChange={(e) => setForm({ ...form, solAddress: e.target.value })} /></AdminField>
             <AdminField label="Ethereum (ETH) Address" wide><input value={form.ethAddress} onChange={(e) => setForm({ ...form, ethAddress: e.target.value })} /></AdminField>
           </>}
-          {tab === "Discord Webhooks" && <>
-            <AdminField label="New order webhook" wide><input placeholder="https://discord.com/api/webhooks/..." /></AdminField>
-            <AdminField label="Invoice paid webhook" wide><input placeholder="https://discord.com/api/webhooks/..." /></AdminField>
-            <AdminField label="Low stock webhook" wide><input placeholder="https://discord.com/api/webhooks/..." /></AdminField>
-            <button type="button" className="secondary-btn"><MessageCircle className="h-4 w-4" /> Test webhook</button>
-          </>}
-          {tab === "Email SMTP" && <>
-            <AdminField label="SMTP host"><input placeholder="smtp.mailgun.org" /></AdminField>
-            <AdminField label="From email"><input placeholder="support@zyvory.xyz" /></AdminField>
-            <AdminField label="SMTP password" wide><input type="password" placeholder="Stored server-side" /></AdminField>
-          </>}
-          {tab === "Security" && <>
-            <AdminField label="Change admin password"><input type="password" placeholder="New password" /></AdminField>
-            <label className="admin-toggle"><span>2FA placeholder</span><input type="checkbox" /></label>
-            <AdminField label="API keys" wide><input type="password" value="••••••••••••••••" readOnly /></AdminField>
-            <AdminEmptyState icon={ShieldCheck} title="Audit logs ready" text="Suspicious admin activity should be logged server-side." />
-          </>}
-          {tab === "Branding" && <>
-            <AdminField label="Logo upload"><div className="upload-area"><Upload className="h-5 w-5" /><span>Upload transparent Z logo</span></div></AdminField>
-            <AdminField label="Favicon upload"><div className="upload-area"><Upload className="h-5 w-5" /><span>Upload favicon</span></div></AdminField>
-            <AdminField label="Accent color"><input type="text" defaultValue="#00D9FF" /></AdminField>
-            <AdminField label="Hero image" wide><input placeholder="/images/hero-reference-characters.png" /></AdminField>
+          {tab === "Notifications" && <>
+            <AdminField label="Discord webhook URL" wide help="Receives new order and payment confirmation notifications."><input value={form.discordWebhookUrl} onChange={(e) => setForm({ ...form, discordWebhookUrl: e.target.value })} placeholder="https://discord.com/api/webhooks/..." /></AdminField>
+            <p style={{fontSize:"0.8rem",color:"#8b949e",margin:"0.5rem 0"}}>Email delivery (SMTP / Resend) is configured via server environment variables for security. See <code>.env.example</code>.</p>
           </>}
           <div className="admin-form-actions"><button className="primary-btn">Save Settings</button></div>
         </form>
@@ -2444,6 +2975,7 @@ function AdminProducts({ data, headers, onChange }) {
       else if (form.image) fd.append("image", form.image);
       await api(path, { method, headers, body: fd });
       setMessage(editingId ? "Product updated." : "Product created.");
+      setShowForm(false);
       reset();
       onChange();
     } catch (err) {
@@ -2467,137 +2999,139 @@ function AdminProducts({ data, headers, onChange }) {
 
   const currentPreview = imagePreview || form.image || "";
 
+  const [showForm, setShowForm] = useState(false);
+  const openNew = () => { reset(); setShowForm(true); };
+  const openEdit = (product) => {
+    setEditingId(product.id);
+    setForm(productToForm(product));
+    setImageFile(null);
+    setImagePreview("");
+    setMessage("");
+    setError("");
+    setShowForm(true);
+  };
+  const openDuplicate = (product) => { setEditingId(""); setForm(productToForm({ ...product, name: `${product.name} Copy`, slug: "" })); setShowForm(true); };
+
   return (
     <div className="admin-content-stack">
-      <AdminPageHeader section="products" title="Products" subtitle="Create, edit, stock, and organize digital products." action={<button className="primary-btn" onClick={reset}><Plus className="h-4 w-4" /> Add Product</button>} />
-      <div className="admin-workspace">
-      <div className="admin-panel">
-        <div className="admin-panel-head">
-          <div>
-            <h3>{editing ? "Edit Product" : "Add Product"}</h3>
-            <p>Create products, assign categories, upload images, and set stock count.</p>
-          </div>
-          {editing && <button className="small-btn" onClick={reset}>New Product</button>}
-        </div>
-        {(message || error) && <AdminNotice message={message || error} tone={error ? "error" : "success"} />}
-        <form className="admin-form" onSubmit={submit}>
-          <div className="admin-form-section-title">Basic information</div>
-          <AdminField label="Product name">
-            <input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Product name" />
-          </AdminField>
-          <AdminField label="Category">
-            <select required value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>
-              <option value="">Select category</option>
-              {catNames.map((name) => <option key={name} value={name}>{name}</option>)}
-            </select>
-          </AdminField>
-          <div className="admin-form-section-title">Pricing & stock</div>
-          <AdminField label="Price USD">
-            <input type="number" min="0" step="0.01" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} />
-          </AdminField>
-          <AdminField label="Currency">
-            <select value={form.currency} onChange={(event) => setForm({ ...form, currency: event.target.value })}>
-              {CURRENCIES.map((c) => <option key={c.code}>{c.code}</option>)}
-            </select>
-          </AdminField>
-          <AdminField label="Badge">
-            <input value={form.badge} onChange={(event) => setForm({ ...form, badge: event.target.value })} placeholder="Popular" />
-          </AdminField>
-          <AdminField label="Status">
-            <select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}>
-              <option>active</option><option>draft</option><option>hidden</option>
-            </select>
-          </AdminField>
-          <AdminField label="Delivery type">
-            <select value={form.deliveryType} onChange={(event) => setForm({ ...form, deliveryType: event.target.value })}>
-              <option>license key</option><option>file download</option><option>account credentials</option><option>private link</option><option>manual delivery</option>
-            </select>
-          </AdminField>
-          <div className="admin-form-section-title">Media</div>
-          <AdminField label="Product Image" wide>
-            <div className="flex items-start gap-4">
-              <label className="upload-area">
-                <Upload className="h-5 w-5 text-blue-300" />
-                <span>Click to upload image</span>
-                <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
-              </label>
-              {currentPreview && <img src={currentPreview} alt="Preview" className="h-20 w-20 rounded-lg object-cover border border-blue-500/20" />}
-            </div>
-            <input value={form.image} onChange={(event) => setForm({ ...form, image: event.target.value })} placeholder="Or paste image URL..." className="mt-2" />
-          </AdminField>
-          <AdminField label="Stock Count">
-            <input type="number" min="0" value={form.stockCount} onChange={(event) => setForm({ ...form, stockCount: event.target.value })} placeholder="Number in stock" />
-          </AdminField>
-          <div className="admin-form-section-title">Description</div>
-          <AdminField label="Short description" wide>
-            <input value={form.shortDescription} onChange={(event) => setForm({ ...form, shortDescription: event.target.value })} placeholder="Short card description" />
-          </AdminField>
-          <AdminField label="Full description" wide>
-            <textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Full product page description" />
-          </AdminField>
-          <AdminField label="Features list" wide help="One feature per line.">
-            <textarea value={form.features} onChange={(event) => setForm({ ...form, features: event.target.value })} placeholder={"Instant delivery\nDashboard access\nReplacement support"} />
-          </AdminField>
-          <div className="admin-form-section-title">SEO / Slug</div>
-          <AdminField label="Product slug">
-            <input value={form.slug} onChange={(event) => setForm({ ...form, slug: event.target.value })} placeholder="chatgpt-plus" />
-          </AdminField>
-          <AdminField label="Meta title">
-            <input value={form.metaTitle} onChange={(event) => setForm({ ...form, metaTitle: event.target.value })} />
-          </AdminField>
-          <AdminField label="Meta description" wide>
-            <input value={form.metaDescription} onChange={(event) => setForm({ ...form, metaDescription: event.target.value })} />
-          </AdminField>
-          <div className="admin-form-actions">
-            <button className="primary-btn">{editing ? "Save Product" : "Create Product"}</button>
-            <button className="secondary-btn" type="button" onClick={reset}>Clear</button>
-          </div>
-        </form>
-      </div>
+      <AdminPageHeader section="products" title="Products" subtitle="Create, edit, stock, and organize digital products." action={<button className="primary-btn" onClick={openNew}><Plus className="h-4 w-4" /> Add Product</button>} />
 
-      <div className="admin-panel">
-        <div className="admin-panel-head">
-          <div>
-            <h3>Products</h3>
-            <p>{products.length} products across {catNames.length} categories.</p>
+      {(message || error) && <AdminNotice message={message || error} tone={error ? "error" : "success"} />}
+
+      {showForm && (
+        <div className="admin-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowForm(false); }}>
+          <div className="admin-modal" style={{maxWidth:"640px"}}>
+            <div className="admin-modal-header">
+              <h2>{editing ? "Edit Product" : "New Product"}</h2>
+              <button className="admin-modal-close" onClick={() => setShowForm(false)}>×</button>
+            </div>
+            <form onSubmit={submit}>
+              <div className="admin-modal-body">
+                <div className="admin-form">
+                  <div className="admin-form-section-title">Basic information</div>
+                  <AdminField label="Product name">
+                    <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Product name" />
+                  </AdminField>
+                  <AdminField label="Category">
+                    <select required value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+                      <option value="">Select category</option>
+                      {catNames.map((n) => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </AdminField>
+                  <div className="admin-form-section-title">Pricing & stock</div>
+                  <AdminField label="Price">
+                    <input type="number" min="0" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
+                  </AdminField>
+                  <AdminField label="Currency">
+                    <select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })}>
+                      {CURRENCIES.map((c) => <option key={c.code}>{c.code}</option>)}
+                    </select>
+                  </AdminField>
+                  <AdminField label="Stock Count">
+                    <input type="number" min="0" value={form.stockCount} onChange={(e) => setForm({ ...form, stockCount: e.target.value })} />
+                  </AdminField>
+                  <AdminField label="Status">
+                    <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                      <option>active</option><option>draft</option><option>hidden</option>
+                    </select>
+                  </AdminField>
+                  <AdminField label="Badge">
+                    <input value={form.badge} onChange={(e) => setForm({ ...form, badge: e.target.value })} placeholder="Popular" />
+                  </AdminField>
+                  <AdminField label="Delivery type">
+                    <select value={form.deliveryType} onChange={(e) => setForm({ ...form, deliveryType: e.target.value })}>
+                      <option>license key</option><option>file download</option><option>account credentials</option><option>private link</option><option>manual delivery</option>
+                    </select>
+                  </AdminField>
+                  <div className="admin-form-section-title">Media</div>
+                  <AdminField label="Product Image" wide>
+                    <div style={{display:"flex",alignItems:"center",gap:".75rem"}}>
+                      <label className="upload-area">
+                        <Upload className="h-4 w-4" />
+                        <span>Upload</span>
+                        <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
+                      </label>
+                      {currentPreview && <img src={currentPreview} alt="Preview" style={{width:"56px",height:"56px",borderRadius:"8px",objectFit:"cover",border:"1px solid rgba(255,255,255,0.08)"}} />}
+                    </div>
+                    <input value={form.image} onChange={(e) => setForm({ ...form, image: e.target.value })} placeholder="Or paste image URL..." style={{marginTop:".5rem"}} />
+                  </AdminField>
+                  <div className="admin-form-section-title">Description</div>
+                  <AdminField label="Short description" wide>
+                    <input value={form.shortDescription} onChange={(e) => setForm({ ...form, shortDescription: e.target.value })} placeholder="Short card description" />
+                  </AdminField>
+                  <AdminField label="Full description" wide>
+                    <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Full product page description" />
+                  </AdminField>
+                  <AdminField label="Features" wide help="One feature per line.">
+                    <textarea value={form.features} onChange={(e) => setForm({ ...form, features: e.target.value })} placeholder={"Instant delivery\nDashboard access"} />
+                  </AdminField>
+                  <div className="admin-form-section-title">SEO</div>
+                  <AdminField label="Slug">
+                    <input value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} placeholder="chatgpt-plus" />
+                  </AdminField>
+                  <AdminField label="Meta title">
+                    <input value={form.metaTitle} onChange={(e) => setForm({ ...form, metaTitle: e.target.value })} />
+                  </AdminField>
+                  <AdminField label="Meta description" wide>
+                    <input value={form.metaDescription} onChange={(e) => setForm({ ...form, metaDescription: e.target.value })} />
+                  </AdminField>
+                </div>
+              </div>
+              <div className="admin-modal-footer">
+                <button type="button" className="small-btn" onClick={() => setShowForm(false)}>Cancel</button>
+                <button className="primary-btn">{editing ? "Save Product" : "Create Product"}</button>
+              </div>
+            </form>
           </div>
         </div>
-        <div className="admin-toolbar">
-          <label><Search className="h-4 w-4" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search products..." /></label>
-          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}><option value="all">All categories</option>{catNames.map((name) => <option key={name}>{name}</option>)}</select>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}><option value="all">All statuses</option><option>active</option><option>draft</option><option>hidden</option></select>
-          <select defaultValue="newest"><option value="newest">Newest</option><option value="popular">Popular</option><option value="stock">Stock</option></select>
+      )}
+
+      <AdminPanel title="Products" text={`${products.length} products`} icon={Package} action={
+        <div style={{display:"flex",alignItems:"center",gap:".5rem",flexWrap:"wrap"}}>
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search..." style={{padding:".4rem .65rem",border:"1px solid rgba(255,255,255,0.08)",borderRadius:"8px",background:"#161b22",color:"#f0f6ff",fontSize:".82rem",width:"160px"}} />
+          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} style={{padding:".4rem .5rem",border:"1px solid rgba(255,255,255,0.08)",borderRadius:"8px",background:"#161b22",color:"#c9d1d9",fontSize:".82rem"}}><option value="all">All categories</option>{catNames.map((n) => <option key={n}>{n}</option>)}</select>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{padding:".4rem .5rem",border:"1px solid rgba(255,255,255,0.08)",borderRadius:"8px",background:"#161b22",color:"#c9d1d9",fontSize:".82rem"}}><option value="all">All</option><option>active</option><option>draft</option><option>hidden</option></select>
         </div>
+      }>
         <div className="admin-list">
           {filteredProducts.map((product) => (
             <div className="admin-product-row" key={product.id}>
-              {product.image ? <img src={product.image} alt={product.name} /> : <div className="admin-product-noimg"><Image className="h-6 w-6 text-slate-500" /></div>}
+              {product.image ? <img src={product.image} alt={product.name} /> : <div className="admin-product-noimg"><Package className="h-5 w-5" style={{color:"#484f58"}} /></div>}
               <div>
                 <strong>{product.name}</strong>
-                <span>{product.category} &bull; {money(product.price)} &bull; {product.stockCount ?? 0} in stock &bull; {product.badge || "No badge"}</span>
+                <span>{product.category} · {money(product.price)} · {product.stockCount ?? 0} stock</span>
               </div>
               <StatusBadge status={product.status || "active"} />
               <div className="admin-row-actions">
-                <button className="small-btn" onClick={() => {
-                  setEditingId(product.id);
-                  setForm(productToForm(product));
-                  setImageFile(null);
-                  setImagePreview("");
-                  setMessage("");
-                  setError("");
-                }}>
-                  Edit
-                </button>
-                <button className="small-btn" onClick={() => { setEditingId(""); setForm(productToForm({ ...product, name: `${product.name} Copy`, slug: "" })); }}>Duplicate</button>
-                <button className="small-btn">Archive</button>
-                <button className="small-btn danger" onClick={() => remove(product)}>Delete</button>
+                <button className="small-btn" onClick={() => openEdit(product)}>Edit</button>
+                <button className="small-btn" onClick={() => openDuplicate(product)}>Dupe</button>
+                <button className="small-btn danger" onClick={() => remove(product)}><Trash2 className="h-3 w-3" /></button>
               </div>
             </div>
           ))}
-          {products.length === 0 && <AdminEmptyState icon={Package} title="No products yet" text="Create your first digital product to start selling." action={<button className="primary-btn" onClick={reset}>Add Product</button>} />}
+          {products.length === 0 && <AdminEmptyState icon={Package} title="No products yet" text="Create your first digital product." action={<button className="primary-btn" onClick={openNew}>Add Product</button>} />}
         </div>
-      </div>
-      </div>
+      </AdminPanel>
     </div>
   );
 }
@@ -2612,8 +3146,12 @@ function AdminCategories({ data, headers, onChange }) {
   const [catImagePreview, setCatImagePreview] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [showModal, setShowModal] = useState(false);
 
   const resetCat = () => { setEditingId(null); setName(""); setTag(""); setCatImageFile(null); setCatImagePreview(""); setError(""); };
+  const openNew = () => { resetCat(); setShowModal(true); };
+  const openEdit = (cat) => { setEditingId(cat.id); setName(cat.name || cat); setTag(cat.tag || ""); setCatImageFile(null); setCatImagePreview(cat.image || ""); setError(""); setMessage(""); setShowModal(true); };
+  const closeModal = () => { setShowModal(false); resetCat(); };
 
   const handleCatImage = (e) => {
     const file = e.target.files[0];
@@ -2636,7 +3174,7 @@ function AdminCategories({ data, headers, onChange }) {
         await api("/admin/categories", { method: "POST", headers, body: fd });
         setMessage("Category created.");
       }
-      resetCat();
+      closeModal();
       onChange();
     } catch (err) {
       setError(err.message);
@@ -2658,74 +3196,73 @@ function AdminCategories({ data, headers, onChange }) {
 
   return (
     <div className="admin-content-stack">
-      <AdminPageHeader section="categories" title="Categories" subtitle="Create and organize storefront browse groups with clean icons and sorting." />
-      <div className="admin-workspace">
-      <div className="admin-panel">
-        <div className="admin-panel-head">
-          <div>
-            <h3>{editingId ? "Edit Category" : "Create Category"}</h3>
-            <p>Categories appear in product forms, filters, and storefront browse links.</p>
-          </div>
-        </div>
-        {(message || error) && <AdminNotice message={message || error} tone={error ? "error" : "success"} />}
-        <form className="admin-inline-form" onSubmit={submit}>
-          <label className="field">
-            <span>Category name</span>
-            <input required value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. CS2 Prime Accounts" />
-          </label>
-          <label className="field">
-            <span>Filter tag <small style={{color: '#7e8da6', fontWeight: 400}}>(browse category)</small></span>
-            <select value={tag} onChange={(event) => setTag(event.target.value)}>
-              <option value="">— No tag —</option>
-              {browseCategories.map((bc) => <option key={bc.name} value={bc.name}>{bc.name}</option>)}
-            </select>
-          </label>
-          <label className="field">
-            <span>Category image</span>
-            <div className="flex items-center gap-3">
-              <label className="upload-area small">
-                <Upload className="h-4 w-4 text-blue-300" />
-                <span>Upload</span>
-                <input type="file" accept="image/*" onChange={handleCatImage} className="hidden" />
-              </label>
-              {catImagePreview && <img src={catImagePreview} alt="Preview" className="h-12 w-12 rounded object-cover border border-blue-500/20" />}
-            </div>
-          </label>
-          <button className="primary-btn">{editingId ? "Save Category" : "Add Category"}</button>
-          {editingId && <button type="button" className="secondary-btn" onClick={resetCat}>Cancel</button>}
-        </form>
-      </div>
+      <AdminPageHeader section="categories" title="Categories" subtitle="Organize storefront browse groups." action={<button className="primary-btn" onClick={openNew}><Plus className="h-4 w-4" /> New Category</button>} />
 
-      <div className="admin-panel">
-        <div className="admin-panel-head">
-          <div>
-            <h3>Manage Categories</h3>
-            <p>{categories.length} active categories.</p>
+      {(message || error) && <AdminNotice message={message || error} tone={error ? "error" : "success"} />}
+
+      {showModal && (
+        <div className="admin-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}>
+          <div className="admin-modal" style={{maxWidth:"460px"}}>
+            <div className="admin-modal-header">
+              <h2>{editingId ? "Edit Category" : "New Category"}</h2>
+              <button className="admin-modal-close" onClick={closeModal}>×</button>
+            </div>
+            <form onSubmit={submit}>
+              <div className="admin-modal-body" style={{display:"grid",gap:".75rem"}}>
+                <label className="field">
+                  <span>Category name</span>
+                  <input required value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. CS2 Prime Accounts" />
+                </label>
+                <label className="field">
+                  <span>Filter tag</span>
+                  <select value={tag} onChange={(e) => setTag(e.target.value)}>
+                    <option value="">— No tag —</option>
+                    {browseCategories.map((bc) => <option key={bc.name} value={bc.name}>{bc.name}</option>)}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Category image</span>
+                  <div style={{display:"flex",alignItems:"center",gap:".75rem"}}>
+                    <label className="upload-area small">
+                      <Upload className="h-4 w-4" />
+                      <span>Upload</span>
+                      <input type="file" accept="image/*" onChange={handleCatImage} className="hidden" />
+                    </label>
+                    {catImagePreview && <img src={catImagePreview} alt="Preview" style={{width:"40px",height:"40px",borderRadius:"6px",objectFit:"cover",border:"1px solid rgba(255,255,255,0.08)"}} />}
+                  </div>
+                </label>
+              </div>
+              <div className="admin-modal-footer">
+                <button type="button" className="small-btn" onClick={closeModal}>Cancel</button>
+                <button className="primary-btn">{editingId ? "Save" : "Create"} Category</button>
+              </div>
+            </form>
           </div>
         </div>
+      )}
+
+      <AdminPanel title="Categories" text={`${categories.length} categories`} icon={Boxes}>
         <div className="admin-list">
           {categories.map((cat) => {
             const catName = cat.name || cat;
             const count = products.filter((p) => p.category === catName).length;
             return (
               <div className="admin-category-row" key={cat.id || catName}>
-                {cat.image ? <img src={cat.image} alt={catName} className="h-10 w-10 rounded object-cover" /> : <div className="h-10 w-10 rounded bg-cyan-900/30 flex items-center justify-center"><Boxes className="h-5 w-5 text-slate-500" /></div>}
+                {cat.image ? <img src={cat.image} alt={catName} style={{width:"36px",height:"36px",borderRadius:"6px",objectFit:"cover"}} /> : <div style={{width:"36px",height:"36px",borderRadius:"6px",background:"#161b22",display:"flex",alignItems:"center",justifyContent:"center"}}><Boxes className="h-4 w-4" style={{color:"#484f58"}} /></div>}
                 <div>
                   <strong>{catName}</strong>
-                  {cat.tag && <span className="pill" style={{marginLeft: '0.5rem', fontSize: '0.7rem'}}>{cat.tag}</span>}
-                  <span>{count} product{count === 1 ? "" : "s"}</span>
+                  <span>{count} product{count === 1 ? "" : "s"}{cat.tag ? ` · ${cat.tag}` : ""}</span>
                 </div>
                 <div className="admin-row-actions">
-                <button className="small-btn" onClick={() => { setEditingId(cat.id); setName(catName); setTag(cat.tag || ""); setCatImageFile(null); setCatImagePreview(cat.image || ""); setError(""); setMessage(""); }}>Edit</button>
-                  <button className="small-btn danger" onClick={() => remove(cat)}>Delete</button>
+                  <button className="small-btn" onClick={() => openEdit(cat)}>Edit</button>
+                  <button className="small-btn danger" onClick={() => remove(cat)}><Trash2 className="h-3 w-3" /></button>
                 </div>
               </div>
             );
           })}
-          {categories.length === 0 && <p className="text-slate-400 py-4">No categories yet. Create your first category above.</p>}
+          {categories.length === 0 && <AdminEmptyState icon={Boxes} title="No categories" text="Create your first category." action={<button className="primary-btn" onClick={openNew}>Add Category</button>} />}
         </div>
-      </div>
-      </div>
+      </AdminPanel>
     </div>
   );
 }

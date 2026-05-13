@@ -6,7 +6,7 @@ import rateLimit from "express-rate-limit";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
-import { randomUUID } from "node:crypto";
+import { randomUUID, randomBytes } from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -17,10 +17,12 @@ import {
   getAllProducts, getProductById, getProductBySlug, getProductStock, createProduct, updateProduct, deleteProduct, consumeStock,
   publicProduct, publicProductListItem,
   getAllInvoices, getInvoiceById, createInvoice, updateInvoice, addInvoiceEvent, getPendingInvoices,
-  getAllOrders, createOrder,
-  getApprovedReviews, getReviewsByProduct, createReview,
-  findOrCreateCustomer, getCustomerByEmail, updateCustomerLastOrder,
-  getActiveCoupon, addActivityLog, addDeliveryLog, getAdminSummary
+  getInvoicesByEmail, getInvoicesByCoin, orderExistsForInvoice,
+  getAllOrders, getOrderByInvoiceId, getOrdersByInvoiceIds, createOrder,
+  getApprovedReviews, getReviewsByProduct, createReview, getAllReviews, updateReviewStatus, deleteReview,
+  findOrCreateCustomer, getCustomerByEmail, updateCustomerLastOrder, deductCustomerBalance, getAllCustomers, updateCustomerBalance,
+  getActiveCoupon, getAllCoupons, createCoupon, updateCoupon, deleteCoupon,
+  addActivityLog, addDeliveryLog, getAdminSummary
 } from "./store.js";
 import { getWalletAddress, getPoolAddress, calculateCryptoAmount, createQrData, supportedCoins, getLivePrices, convertFiat } from "./payments.js";
 import { getIncomingTransactions, findMatchingPayment, getRequiredConfirmations } from "./blockchain.js";
@@ -48,7 +50,7 @@ const upload = multer({
 
 const app = express();
 const port = Number(process.env.PORT || 8787);
-const jwtSecret = process.env.JWT_SECRET || "dev-only-change-this-secret";
+const jwtSecret = process.env.JWT_SECRET || (() => { console.warn("[SECURITY] JWT_SECRET not set! Using random secret (tokens won't persist across restarts)"); return randomBytes(32).toString("hex"); })();
 
 app.set("trust proxy", 1);
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -117,8 +119,7 @@ async function calculateItems(requestedItems) {
 }
 
 async function completeInvoice(invoice) {
-  const existing = await getAllOrders();
-  if (existing.some((o) => o.invoiceId === invoice.id)) return;
+  if (await orderExistsForInvoice(invoice.id)) return;
   const deliveryItems = [];
   for (const item of invoice.items) {
     const product = await getProductById(item.productId);
@@ -148,6 +149,13 @@ async function completeInvoice(invoice) {
   const customer = await findOrCreateCustomer(invoice.customerEmail);
   await updateCustomerLastOrder(invoice.customerEmail);
   await sendDiscordWebhook("Payment confirmed", { invoice: invoice.id, order: orderId, total: `$${invoice.totalUsd}` });
+  // Send delivery email to customer
+  try {
+    const order = await getOrderByInvoiceId(invoice.id);
+    if (order) await sendDeliveryEmail(invoice, order);
+  } catch (emailErr) {
+    console.error(`[delivery] Failed to send delivery email for ${orderId}:`, emailErr.message);
+  }
 }
 
 async function expireOldInvoices() {
@@ -254,10 +262,13 @@ app.get("/api/products", async (req, res) => {
   const search = String(req.query.search || "").toLowerCase();
   const category = String(req.query.category || "");
   const sort = String(req.query.sort || "popular");
-  let products = (await getAllProducts()).map(publicProductListItem).map(p => ({
-    ...p,
-    image: p.image ? `/api/img/product/${p.id}` : null
-  }));
+  let products = (await getAllProducts())
+    .filter((p) => (p.status || "active") === "active")
+    .map(publicProductListItem)
+    .map(p => ({
+      ...p,
+      image: p.image ? `/api/img/product/${p.id}` : null
+    }));
   if (search) products = products.filter((p) => p.name.toLowerCase().includes(search));
   if (category) products = products.filter((p) => p.category === category);
   if (req.query.maxPrice) products = products.filter((p) => p.price <= Number(req.query.maxPrice));
@@ -300,9 +311,13 @@ app.post("/api/invoices", checkoutLimiter, async (req, res) => {
     let depositAddress = null;
     let qrCodeData = null;
     let qrCode = null;
-    if (["LTC", "BTC", "SOL", "ETH"].includes(parsed.data.paymentMethod)) {
-      const allInvoices = await getAllInvoices();
-      const pendingForCoin = allInvoices.filter((inv) => inv.selectedCoin === parsed.data.paymentMethod && inv.status === "pending");
+    if (parsed.data.paymentMethod === "PAYPAL_FF") {
+      const settings = await getSettings();
+      const paypalEmail = settings.paypalEmail;
+      if (!paypalEmail) throw new Error("PayPal is not configured. Please choose a crypto payment method.");
+      depositAddress = paypalEmail;
+    } else if (["LTC", "BTC", "SOL", "ETH"].includes(parsed.data.paymentMethod)) {
+      const pendingForCoin = await getInvoicesByCoin(parsed.data.paymentMethod);
       // Try address pool first, fall back to single wallet address
       const usedAddresses = pendingForCoin.map((inv) => inv.depositAddress).filter(Boolean);
       const poolAddr = getPoolAddress(parsed.data.paymentMethod, usedAddresses);
@@ -337,14 +352,27 @@ app.post("/api/invoices", checkoutLimiter, async (req, res) => {
       transactionId: null,
       confirmationCount: 0,
       mockDetected: 0,
-      status: parsed.data.paymentMethod === "BALANCE" ? "paid" : "pending",
+      status: "pending",
       createdAt: toMySQLDatetime(createdAt),
       expiresAt: toMySQLDatetime(new Date(createdAt.getTime() + 60 * 60 * 1000))
     };
     const invoice = await createInvoice(invoiceData);
     await addActivityLog("invoice_created", id);
     await sendDiscordWebhook("New order", { invoice: id, email: invoice.customerEmail, total: `$${totalUsd}`, method: invoice.selectedCoin });
-    if (invoice.status === "paid") await completeInvoice(invoice);
+    // Handle BALANCE payment: verify and deduct balance
+    if (parsed.data.paymentMethod === "BALANCE") {
+      const customer = await findOrCreateCustomer(parsed.data.email.toLowerCase());
+      const balance = Number(customer.balance || 0);
+      if (balance < totalUsd) {
+        await updateInvoice(invoice.id, { status: "failed" });
+        return res.status(400).json({ error: `Insufficient balance. You have €${balance.toFixed(2)} but need €${totalUsd.toFixed(2)}.` });
+      }
+      await deductCustomerBalance(parsed.data.email.toLowerCase(), totalUsd);
+      await updateInvoice(invoice.id, { status: "paid", transactionId: `balance_${Date.now().toString(36)}` });
+      const paidInvoice = await getInvoiceById(invoice.id);
+      await completeInvoice(paidInvoice);
+      return res.status(201).json(paidInvoice);
+    }
     res.status(201).json(invoice);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -354,7 +382,9 @@ app.post("/api/invoices", checkoutLimiter, async (req, res) => {
 app.get("/api/invoices/:id", async (req, res) => {
   const invoice = await getInvoiceById(req.params.id);
   if (!invoice) return res.status(404).json({ error: "Invoice not found" });
-  res.json(invoice);
+  // Strip internal fields (newsletter, coupon details, mock flags) from public response
+  const { newsletter, mockDetected, discount, couponCode, subtotal, ...publicInvoice } = invoice;
+  res.json(publicInvoice);
 });
 
 app.get("/api/settings/public", async (_req, res) => {
@@ -389,31 +419,19 @@ app.post("/api/dashboard/verify-code", dashboardCodeLimiter, async (req, res) =>
   }
   if (stored.code !== code) return res.status(400).json({ error: "Invalid code. Please try again." });
   verificationCodes.delete(email);
-  // Return dashboard data
-  const allInvoices = await getAllInvoices();
-  const invoices = allInvoices.filter((inv) => inv.customerEmail === email);
-  const allOrders = await getAllOrders();
-  const orders = allOrders.filter((order) => invoices.some((inv) => inv.id === order.invoiceId));
+  // Return dashboard data using filtered queries
+  const invoices = await getInvoicesByEmail(email);
+  const invoiceIds = invoices.map((inv) => inv.id);
+  const orders = await getOrdersByInvoiceIds(invoiceIds);
   const customer = (await getCustomerByEmail(email)) || { email, balance: 0 };
   const allReviews = await getApprovedReviews();
-  const reviewCount = allReviews.filter((r) => {
-    const matchInvoice = invoices.some((inv) => inv.id === r.invoiceId);
-    return matchInvoice;
-  }).length;
+  const invoiceIdSet = new Set(invoiceIds);
+  const reviewCount = allReviews.filter((r) => invoiceIdSet.has(r.invoiceId)).length;
   res.json({ customer, invoices, orders, reviewCount });
 });
 
-app.get("/api/dashboard", async (req, res) => {
-  const email = String(req.query.email || "").toLowerCase();
-  const invId = String(req.query.invoiceId || "");
-  if (!email && !invId) return res.status(400).json({ error: "Email or invoice ID required" });
-  const allInvoices = await getAllInvoices();
-  const invoices = allInvoices.filter((inv) => (email && inv.customerEmail === email) || (invId && inv.id === invId));
-  const allOrders = await getAllOrders();
-  const orders = allOrders.filter((order) => invoices.some((inv) => inv.id === order.invoiceId));
-  const customer = (email ? await getCustomerByEmail(email) : null) || { email: email || invId, balance: 0 };
-  res.json({ customer, invoices, orders });
-});
+// Dashboard data requires verification code flow (POST /dashboard/send-code + /dashboard/verify-code)
+// Legacy GET endpoint removed for security — use the code-verified flow instead.
 
 app.post("/api/reviews", async (req, res) => {
   const schema = z.object({
@@ -441,13 +459,30 @@ app.post("/api/reviews", async (req, res) => {
   }
 });
 
+app.post("/api/coupons/validate", async (req, res) => {
+  const code = String(req.body.code || "").trim();
+  const subtotal = Number(req.body.subtotal || 0);
+  if (!code) return res.status(400).json({ error: "Coupon code is required" });
+  try {
+    const coupon = await getActiveCoupon(code);
+    if (!coupon) return res.status(400).json({ error: "Invalid or expired coupon code" });
+    const discount = coupon.type === "percent"
+      ? subtotal * (Number(coupon.value) / 100)
+      : Number(coupon.value);
+    res.json({ valid: true, discount: Number(Math.min(discount, subtotal).toFixed(2)), type: coupon.type, value: Number(coupon.value) });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 // ── Admin routes ──
 
 app.post("/api/admin/login", adminLimiter, async (req, res) => {
   const email = String(req.body.email || "");
   const password = String(req.body.password || "");
-  const adminEmail = process.env.ADMIN_EMAIL || "crownshoptn@gmail.com";
-  const adminPassword = process.env.ADMIN_PASSWORD || "Aa2255860955@";
+  const adminEmail = process.env.ADMIN_EMAIL;
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  if (!adminEmail || !adminPassword) return res.status(500).json({ error: "Admin credentials not configured on server" });
   const ok = email === adminEmail && (password === adminPassword || (adminPassword.startsWith("$2") && (await bcrypt.compare(password, adminPassword))));
   if (!ok) return res.status(401).json({ error: "Invalid admin credentials" });
   res.json({ token: createToken(email), email });
@@ -514,6 +549,7 @@ app.post("/api/admin/products", auth, upload.single("image"), async (req, res) =
   try {
     const body = req.body;
     const image = req.file ? fileToDataUrl(req.file) : (body.image || null);
+    const features = body.features ? normalizeList(body.features) : [];
     const product = await createProduct({
       id: `prod_${randomUUID().slice(0, 8)}`,
       name: String(body.name || "").trim(),
@@ -523,7 +559,13 @@ app.post("/api/admin/products", auth, upload.single("image"), async (req, res) =
       badge: body.badge || "New",
       stockCount: Number(body.stockCount || 0),
       shortDescription: body.shortDescription || "",
-      description: body.description || ""
+      description: body.description || "",
+      features,
+      deliveryType: body.deliveryType || "license key",
+      status: body.status || "active",
+      slug: body.slug || "",
+      metaTitle: body.metaTitle || "",
+      metaDescription: body.metaDescription || ""
     });
     res.status(201).json(product);
   } catch (error) {
@@ -544,6 +586,12 @@ app.put("/api/admin/products/:id", auth, upload.single("image"), async (req, res
     if (body.stockCount !== undefined) data.stockCount = Number(body.stockCount);
     if (body.shortDescription !== undefined) data.shortDescription = body.shortDescription;
     if (body.description !== undefined) data.description = body.description;
+    if (body.features !== undefined) data.features = normalizeList(body.features);
+    if (body.deliveryType) data.deliveryType = body.deliveryType;
+    if (body.status) data.status = body.status;
+    if (body.slug !== undefined) data.slug = body.slug;
+    if (body.metaTitle !== undefined) data.metaTitle = body.metaTitle;
+    if (body.metaDescription !== undefined) data.metaDescription = body.metaDescription;
     const product = await updateProduct(req.params.id, data);
     if (!product) return res.status(404).json({ error: "Product not found" });
     res.json(product);
@@ -580,6 +628,20 @@ app.get("/api/admin/orders", auth, async (_req, res) => {
   res.json(await getAllOrders());
 });
 
+app.post("/api/admin/orders/:id/resend", auth, async (req, res) => {
+  try {
+    const orders = await getAllOrders();
+    const order = orders.find(o => o.id === req.params.id);
+    if (!order) return res.status(404).json({ error: "Order not found" });
+    const invoice = await getInvoiceById(order.invoiceId);
+    if (!invoice) return res.status(404).json({ error: "Invoice not found for this order" });
+    await sendDeliveryEmail(invoice, order);
+    res.json({ success: true, message: "Delivery email resent" });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 app.get("/api/admin/settings", auth, async (_req, res) => {
   res.json(await getSettings());
 });
@@ -587,6 +649,88 @@ app.get("/api/admin/settings", auth, async (_req, res) => {
 app.put("/api/admin/settings", auth, async (req, res) => {
   const settings = await updateSettings(req.body);
   res.json(settings);
+});
+
+// ── Admin: Customers ──
+
+app.get("/api/admin/customers", auth, async (_req, res) => {
+  res.json(await getAllCustomers());
+});
+
+app.put("/api/admin/customers/:email/balance", auth, async (req, res) => {
+  try {
+    const email = decodeURIComponent(req.params.email);
+    const balance = Number(req.body.balance);
+    if (isNaN(balance) || balance < 0) return res.status(400).json({ error: "Invalid balance" });
+    const customer = await updateCustomerBalance(email, balance);
+    if (!customer) return res.status(404).json({ error: "Customer not found" });
+    res.json(customer);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// ── Admin: Coupons ──
+
+app.get("/api/admin/coupons", auth, async (_req, res) => {
+  res.json(await getAllCoupons());
+});
+
+app.post("/api/admin/coupons", auth, async (req, res) => {
+  try {
+    const { code, type, value, active, expiresAt } = req.body;
+    if (!code || !value) return res.status(400).json({ error: "Code and value are required" });
+    const coupon = await createCoupon({ code, type: type || "percent", value: Number(value), active: active !== false, expiresAt: expiresAt || "2026-12-31 23:59:59" });
+    res.status(201).json(coupon);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.put("/api/admin/coupons/:id", auth, async (req, res) => {
+  try {
+    const coupon = await updateCoupon(Number(req.params.id), req.body);
+    if (!coupon) return res.status(404).json({ error: "Coupon not found" });
+    res.json(coupon);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.delete("/api/admin/coupons/:id", auth, async (req, res) => {
+  try {
+    await deleteCoupon(Number(req.params.id));
+    res.status(204).end();
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// ── Admin: Reviews ──
+
+app.get("/api/admin/reviews", auth, async (_req, res) => {
+  res.json(await getAllReviews());
+});
+
+app.put("/api/admin/reviews/:id/status", auth, async (req, res) => {
+  try {
+    const status = req.body.status;
+    if (!["approved", "rejected", "pending"].includes(status)) return res.status(400).json({ error: "Invalid status" });
+    const review = await updateReviewStatus(req.params.id, status);
+    if (!review) return res.status(404).json({ error: "Review not found" });
+    res.json(review);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.delete("/api/admin/reviews/:id", auth, async (req, res) => {
+  try {
+    await deleteReview(req.params.id);
+    res.status(204).end();
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
 });
 
 // ── Serve frontend in production ──
