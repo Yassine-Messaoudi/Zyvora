@@ -312,15 +312,66 @@ async function checkPendingPayments() {
   }
 }
 
-setInterval(() => {
-  checkPendingPayments().catch((error) => console.error("payment check failed", error));
-}, 15_000);
+// Payment poller health — exposed via /api/health so we can verify the
+// detector is alive on production without SSH. Updated on every poll cycle.
+const pollerHealth = {
+  startedAt: new Date().toISOString(),
+  lastPollAt: null,
+  lastPollOk: null,
+  lastPollDurationMs: null,
+  lastError: null,
+  totalPolls: 0,
+  totalErrors: 0
+};
+
+async function runPaymentPoll() {
+  const start = Date.now();
+  pollerHealth.totalPolls += 1;
+  try {
+    await checkPendingPayments();
+    pollerHealth.lastPollAt = new Date().toISOString();
+    pollerHealth.lastPollOk = true;
+    pollerHealth.lastPollDurationMs = Date.now() - start;
+    pollerHealth.lastError = null;
+  } catch (error) {
+    pollerHealth.lastPollAt = new Date().toISOString();
+    pollerHealth.lastPollOk = false;
+    pollerHealth.lastPollDurationMs = Date.now() - start;
+    pollerHealth.lastError = error?.message || String(error);
+    pollerHealth.totalErrors += 1;
+    console.error("payment check failed", error);
+  }
+}
+
+// Run once at boot so health endpoint has data immediately, then every 15s.
+runPaymentPoll();
+setInterval(runPaymentPoll, 15_000);
 
 // ── Public routes ──
 
 app.get("/api/health", async (_req, res) => {
   const settings = await getSettings();
-  res.json({ ok: true, storeName: settings.storeName || "Zyvory Market", coins: supportedCoins() });
+  // Derive a simple "stale" flag — if last poll was >60s ago, something is wrong.
+  const lastPollAgeMs = pollerHealth.lastPollAt ? Date.now() - new Date(pollerHealth.lastPollAt).getTime() : null;
+  const pollerStale = lastPollAgeMs == null || lastPollAgeMs > 60_000;
+  res.json({
+    ok: true,
+    storeName: settings.storeName || "Zyvory Market",
+    coins: supportedCoins(),
+    paymentPoller: {
+      startedAt: pollerHealth.startedAt,
+      lastPollAt: pollerHealth.lastPollAt,
+      lastPollOk: pollerHealth.lastPollOk,
+      lastPollDurationMs: pollerHealth.lastPollDurationMs,
+      lastError: pollerHealth.lastError,
+      totalPolls: pollerHealth.totalPolls,
+      totalErrors: pollerHealth.totalErrors,
+      mode: process.env.PAYMENT_MODE || "live",
+      intervalMs: 15_000,
+      stale: pollerStale,
+      lastPollAgeSeconds: lastPollAgeMs != null ? Math.round(lastPollAgeMs / 1000) : null
+    }
+  });
 });
 
 app.get("/api/prices", async (_req, res) => {

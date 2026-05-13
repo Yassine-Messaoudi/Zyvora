@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { motion } from "framer-motion";
 import {
@@ -1411,6 +1411,7 @@ function InvoicePage({ invoiceId }) {
   const [copied, setCopied] = useState("");
   const [recheckBusy, setRecheckBusy] = useState(false);
   const [recheckResult, setRecheckResult] = useState(null);
+  const autoRecheckedRef = useRef(false);
   useEffect(() => {
     api(`/invoices/${invoiceId}`).then(setInvoice).catch((err) => setError(err.message));
     api("/settings/public").then((s) => setDiscordLink(s.discordInvite || "")).catch(() => {});
@@ -1422,6 +1423,19 @@ function InvoicePage({ invoiceId }) {
     }, 10_000);
     return () => { clearInterval(tick); clearInterval(poll); };
   }, [invoiceId]);
+  // Auto-trigger a single recheck on first load for pending crypto invoices.
+  // Most customers refresh / revisit after sending — no need to click the button.
+  useEffect(() => {
+    if (!invoice || autoRecheckedRef.current) return;
+    if (invoice.status !== "pending") return;
+    if (!invoice.depositAddress || !invoice.selectedCoin) return;
+    if (invoice.selectedCoin === "PAYPAL_FF") return;
+    autoRecheckedRef.current = true;
+    // Fire-and-forget; the existing 10s invoice poll will pick up the new state.
+    api(`/invoices/${invoiceId}/recheck`, { method: "POST", body: "{}" })
+      .then(() => api(`/invoices/${invoiceId}`).then((inv) => { if (inv) setInvoice(inv); }))
+      .catch(() => {});
+  }, [invoice, invoiceId]);
   const checkPaymentNow = async () => {
     if (recheckBusy) return;
     setRecheckBusy(true);
@@ -3021,7 +3035,7 @@ function AdminInvoices({ data, headers, onChange }) {
               <strong style={{fontSize:".78rem"}}>{inv.id.slice(0, 14)}...</strong>
               <span>{inv.customerEmail || "Unknown"}</span>
               <span>{inv.selectedCoin || "LTC"}</span>
-              <code>{(inv.expectedCryptoAmount || "0").slice(0, 12)}</code>
+              <code>{String(inv.expectedCryptoAmount ?? "0").slice(0, 12)}</code>
               <StatusBadge status={inv.status} />
               <span>{formatAdminDate(inv.expiresAt)}</span>
               <div className="admin-row-actions">

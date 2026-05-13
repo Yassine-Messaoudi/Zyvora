@@ -9,9 +9,9 @@
 //   invoice each incoming tx belongs to.
 
 const REQUIRED_CONFIRMATIONS = {
-  BTC: Number(process.env.REQUIRED_CONFIRMATIONS_BTC || 2),
-  LTC: Number(process.env.REQUIRED_CONFIRMATIONS_LTC || 2),
-  ETH: Number(process.env.REQUIRED_CONFIRMATIONS_ETH || 12),
+  BTC: Number(process.env.REQUIRED_CONFIRMATIONS_BTC || 1),
+  LTC: Number(process.env.REQUIRED_CONFIRMATIONS_LTC || 1),
+  ETH: Number(process.env.REQUIRED_CONFIRMATIONS_ETH || 6),
   SOL: Number(process.env.REQUIRED_CONFIRMATIONS_SOL || 1)
 };
 
