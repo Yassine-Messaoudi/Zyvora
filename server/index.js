@@ -314,7 +314,7 @@ async function checkPendingPayments() {
 
 setInterval(() => {
   checkPendingPayments().catch((error) => console.error("payment check failed", error));
-}, 30_000);
+}, 15_000);
 
 // ── Public routes ──
 
@@ -536,6 +536,60 @@ app.get("/api/invoices/:id", async (req, res) => {
   // Strip internal fields (newsletter, coupon details, mock flags) from public response
   const { newsletter, mockDetected, discount, couponCode, subtotal, ...publicInvoice } = invoice;
   res.json(publicInvoice);
+});
+
+// ── Public per-invoice recheck — customers can click "Check now" instead of waiting 30s ──
+// Per-invoice 10s cache prevents blockchain-provider abuse; per-IP limiter prevents spam.
+const recheckCache = new Map(); // invoiceId -> { at, result }
+const invoiceRecheckLimiter = rateLimit({ windowMs: 60_000, limit: 20 });
+app.post("/api/invoices/:id/recheck", invoiceRecheckLimiter, async (req, res) => {
+  try {
+    const invoice = await getInvoiceById(req.params.id);
+    if (!invoice) return res.status(404).json({ error: "Invoice not found" });
+
+    if (invoice.status === "paid") {
+      return res.json({ status: "paid", confirmations: invoice.confirmationCount || 0, txHash: invoice.transactionId, cached: false });
+    }
+    if (invoice.status === "expired") {
+      return res.status(409).json({ error: "Invoice expired" });
+    }
+    if (!invoice.depositAddress || !invoice.selectedCoin || invoice.selectedCoin === "PAYPAL_FF") {
+      return res.status(400).json({ error: "Not a crypto invoice" });
+    }
+
+    // 10-second per-invoice cache to protect upstream blockchain providers
+    const cached = recheckCache.get(invoice.id);
+    if (cached && Date.now() - cached.at < 10_000) {
+      return res.json({ ...cached.result, cached: true });
+    }
+
+    const txs = await getIncomingTransactions(invoice.selectedCoin, invoice.depositAddress);
+    const required = getRequiredConfirmations(invoice.selectedCoin);
+    const tight = findMatchingPayment(txs, invoice.expectedCryptoAmount);
+    const over = !tight ? findOverpaymentMatch(txs, invoice.expectedCryptoAmount) : null;
+    const fee = !tight && !over ? findFeeDeductedMatch(txs, invoice.expectedCryptoAmount, invoice.selectedCoin) : null;
+    const match = tight || over || fee;
+
+    let result;
+    if (match && match.confirmations >= required && invoice.status !== "paid") {
+      const event = tight ? "payment_confirmed" : over ? "payment_confirmed_overpaid" : "payment_confirmed_fee_deducted";
+      await updateInvoice(invoice.id, { status: "paid", transactionId: match.txHash, confirmationCount: match.confirmations });
+      await addInvoiceEvent(invoice.id, event);
+      const fresh = await getInvoiceById(invoice.id);
+      await completeInvoice(fresh);
+      result = { status: "paid", confirmations: match.confirmations, requiredConfirmations: required, txHash: match.txHash };
+    } else if (match) {
+      await updateInvoice(invoice.id, { transactionId: match.txHash, confirmationCount: match.confirmations });
+      result = { status: "detected", confirmations: match.confirmations, requiredConfirmations: required, txHash: match.txHash };
+    } else {
+      result = { status: "pending", confirmations: 0, requiredConfirmations: required, txsAtAddress: txs.length };
+    }
+    recheckCache.set(invoice.id, { at: Date.now(), result });
+    res.json({ ...result, cached: false });
+  } catch (err) {
+    console.error(`[recheck] ${req.params.id}:`, err.message);
+    res.status(500).json({ error: "Recheck failed, please try again" });
+  }
 });
 
 app.get("/api/settings/public", async (_req, res) => {

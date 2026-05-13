@@ -28,6 +28,7 @@ import {
   Monitor,
   Package,
   Plus,
+  RefreshCw,
   Rocket,
   Search,
   Settings,
@@ -1408,6 +1409,8 @@ function InvoicePage({ invoiceId }) {
   const [error, setError] = useState("");
   const [now, setNow] = useState(Date.now());
   const [copied, setCopied] = useState("");
+  const [recheckBusy, setRecheckBusy] = useState(false);
+  const [recheckResult, setRecheckResult] = useState(null);
   useEffect(() => {
     api(`/invoices/${invoiceId}`).then(setInvoice).catch((err) => setError(err.message));
     api("/settings/public").then((s) => setDiscordLink(s.discordInvite || "")).catch(() => {});
@@ -1419,6 +1422,24 @@ function InvoicePage({ invoiceId }) {
     }, 10_000);
     return () => { clearInterval(tick); clearInterval(poll); };
   }, [invoiceId]);
+  const checkPaymentNow = async () => {
+    if (recheckBusy) return;
+    setRecheckBusy(true);
+    setRecheckResult(null);
+    try {
+      const r = await api(`/invoices/${invoiceId}/recheck`, { method: "POST", body: "{}" });
+      setRecheckResult(r);
+      // Refresh invoice so UI reflects new status/confirmation immediately
+      const fresh = await api(`/invoices/${invoiceId}`);
+      if (fresh) setInvoice(fresh);
+    } catch (err) {
+      setRecheckResult({ error: err.message || "Recheck failed" });
+    } finally {
+      setRecheckBusy(false);
+      // Clear result after 8s so the UI doesn't get stale
+      setTimeout(() => setRecheckResult(null), 8000);
+    }
+  };
   if (error) return <ErrorMessage message={error} />;
   if (!invoice) return <Loading />;
   const seconds = Math.max(0, Math.floor((new Date(invoice.expiresAt).getTime() - now) / 1000));
@@ -1594,6 +1615,33 @@ function InvoicePage({ invoiceId }) {
             <div className="inv-step"><span className="inv-step-num">2</span><span>Payment will be detected automatically after network confirmation</span></div>
             <div className="inv-step"><span className="inv-step-num">3</span><span>Send only {invoice.selectedCoin} to this address. Other cryptocurrencies will be lost.</span></div>
           </div>
+          <button
+            type="button"
+            className="inv-check-now-btn"
+            onClick={checkPaymentNow}
+            disabled={recheckBusy}
+          >
+            {recheckBusy ? (
+              <><span className="inv-check-spinner" /> Checking blockchain...</>
+            ) : (
+              <><RefreshCw className="h-4 w-4" /> Already sent? Check payment now</>
+            )}
+          </button>
+          {recheckResult && (
+            <div className={`inv-check-result inv-check-${recheckResult.error ? "error" : recheckResult.status || "pending"}`}>
+              {recheckResult.error ? (
+                <>⚠ {recheckResult.error}</>
+              ) : recheckResult.status === "paid" ? (
+                <>✓ Payment confirmed! Order is being delivered.</>
+              ) : recheckResult.status === "detected" ? (
+                <>◎ Transaction detected — {recheckResult.confirmations}/{recheckResult.requiredConfirmations} confirmations. We'll auto-deliver once confirmed.</>
+              ) : recheckResult.txsAtAddress > 0 ? (
+                <>{recheckResult.txsAtAddress} transaction{recheckResult.txsAtAddress > 1 ? "s" : ""} at this address, but none match the expected amount yet. If you just sent, wait 1–2 min for the network to broadcast.</>
+              ) : (
+                <>No payment detected yet. If you just sent, please wait 1–2 min for the network to broadcast.{recheckResult.cached && " (cached)"}</>
+              )}
+            </div>
+          )}
           {detected ? (
             <div className="inv-waiting" style={{borderColor:"rgba(34,197,94,0.3)",background:"rgba(34,197,94,0.08)"}}>
               <span className="inv-waiting-dot" style={{background:"#22c55e"}}></span>
