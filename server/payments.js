@@ -143,7 +143,9 @@ export function getWalletAddress(settings, coin) {
   return address;
 }
 
-// Address pool: assigns a unique address per invoice from a comma-separated env pool
+// Address pool: picks an address for the invoice.
+// Prefers an unused address; if all are in use, reuses the least-used one.
+// Payment matching works by unique amount, so address reuse is safe.
 export function getPoolAddress(coin, usedAddresses = []) {
   const poolStr = process.env[`${coin}_ADDRESS_POOL`] || "";
   const pool = poolStr.split(",").map(a => a.trim()).filter(Boolean);
@@ -152,10 +154,18 @@ export function getPoolAddress(coin, usedAddresses = []) {
   const usedSet = new Set(usedAddresses.map(a => a.toLowerCase()));
   const available = pool.filter(a => !usedSet.has(a.toLowerCase()));
 
-  if (available.length === 0) {
-    throw new Error(`All ${coin} addresses are in use (${pool.length} total). Wait for pending invoices to complete or add more addresses to ${coin}_ADDRESS_POOL.`);
+  if (available.length > 0) return available[0];
+
+  // All addresses in use — reuse the one with fewest pending invoices
+  const counts = {};
+  for (const a of usedAddresses) counts[a.toLowerCase()] = (counts[a.toLowerCase()] || 0) + 1;
+  let best = pool[0];
+  let min = Infinity;
+  for (const a of pool) {
+    const c = counts[a.toLowerCase()] || 0;
+    if (c < min) { min = c; best = a; }
   }
-  return available[0];
+  return best;
 }
 
 export async function createQrData(coin, address, amount, invoiceId) {
