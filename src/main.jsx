@@ -1408,6 +1408,9 @@ function InvoicePage({ invoiceId }) {
           )}
           <div className="inv-exact-amount">
             <p className="inv-exact-label">SEND EXACT AMOUNT</p>
+            {invoice.totalUsd && invoice.expectedCryptoAmount && (
+              <p style={{margin:"0 0 0.5rem",fontSize:"0.72rem",color:"#8b949e"}}>Rate: 1 {invoice.selectedCoin} ≈ €{(invoice.totalUsd / invoice.expectedCryptoAmount).toFixed(2)}</p>
+            )}
             <div className="inv-exact-row">
               <span className="inv-exact-value">{invoice.expectedCryptoAmount} {invoice.selectedCoin}</span>
               <button className="inv-copy-btn" onClick={() => copyText(String(invoice.expectedCryptoAmount), "amount")} title="Copy amount">

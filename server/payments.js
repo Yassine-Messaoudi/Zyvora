@@ -39,33 +39,35 @@ async function fetchFromCoinGecko() {
   return { rates, fiatRates };
 }
 
-// Fallback: fetch prices from Binance API (free, no key, very reliable)
+// Primary: fetch prices from Binance API (free, no key, very reliable)
+// Uses only USDT pairs (guaranteed to exist) + BTCEUR for EUR conversion
 async function fetchFromBinance() {
-  const symbols = [];
-  for (const symbol of Object.keys(coinMeta)) {
-    for (const fiat of ["EUR", "USDT"]) symbols.push(`${symbol}${fiat}`);
-  }
-  const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbols=${JSON.stringify(symbols)}`);
+  const usdtPairs = Object.keys(coinMeta).map(s => `${s}USDT`);
+  const allSymbols = [...usdtPairs, "BTCEUR"];
+  const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbols=${JSON.stringify(allSymbols)}`);
   if (!res.ok) throw new Error(`Binance HTTP ${res.status}`);
   const data = await res.json();
 
   const priceMap = {};
   for (const item of data) priceMap[item.symbol] = Number(item.price);
 
-  // Get EUR/USD rate from BTC pairs
-  const btcEur = priceMap.BTCEUR || 0;
+  // Derive EUR/USDT rate from BTC pairs: BTCEUR / BTCUSDT
   const btcUsdt = priceMap.BTCUSDT || 0;
-  const eurToUsd = btcEur && btcUsdt ? btcUsdt / btcEur : 1.08;
+  const btcEur = priceMap.BTCEUR || 0;
+  const usdtToEur = btcEur && btcUsdt ? btcEur / btcUsdt : 0.92;
 
   const rates = {};
   for (const symbol of Object.keys(coinMeta)) {
+    const usdtPrice = priceMap[`${symbol}USDT`] || 0;
     rates[symbol] = {
-      eur: priceMap[`${symbol}EUR`] || 0,
-      usd: priceMap[`${symbol}USDT`] || 0,
-      usdt: priceMap[`${symbol}USDT`] || 0
+      eur: Number((usdtPrice * usdtToEur).toFixed(8)),
+      usd: usdtPrice,
+      usdt: usdtPrice
     };
   }
+  const eurToUsd = usdtToEur ? 1 / usdtToEur : 1.08;
   const fiatRates = { eurTousd: eurToUsd, eurTousdt: eurToUsd };
+  console.log(`[prices] Binance rates — USDT/EUR=${usdtToEur.toFixed(4)} LTC/EUR=${rates.LTC?.eur} BTC/EUR=${rates.BTC?.eur}`);
   return { rates, fiatRates };
 }
 
@@ -73,18 +75,18 @@ async function fetchPrices() {
   if (Date.now() - priceCache.lastFetch < CACHE_TTL && Object.keys(priceCache.rates).length) {
     return priceCache;
   }
-  // Try CoinGecko first, fallback to Binance
+  // Try Binance first (most reliable), fallback to CoinGecko
   let result = null;
   try {
-    result = await fetchFromCoinGecko();
-    console.log("[prices] Refreshed from CoinGecko");
+    result = await fetchFromBinance();
+    console.log("[prices] Refreshed from Binance");
   } catch (err) {
-    console.warn("[prices] CoinGecko failed:", err.message, "— trying Binance...");
+    console.warn("[prices] Binance failed:", err.message, "— trying CoinGecko...");
     try {
-      result = await fetchFromBinance();
-      console.log("[prices] Refreshed from Binance (fallback)");
+      result = await fetchFromCoinGecko();
+      console.log("[prices] Refreshed from CoinGecko (fallback)");
     } catch (err2) {
-      console.error("[prices] Binance also failed:", err2.message);
+      console.error("[prices] CoinGecko also failed:", err2.message);
     }
   }
   if (result && Object.keys(result.rates).length) {
@@ -108,6 +110,7 @@ export async function calculateCryptoAmount(totalEur, coin, existingAmounts = []
   const cache = await fetchPrices();
   const coinRates = cache.rates[coin];
   if (!coinRates || !coinRates.eur) throw new Error(`No live price for ${coin}. Try again shortly.`);
+  console.log(`[prices] Converting €${totalEur} to ${coin} at rate 1 ${coin} = €${coinRates.eur}`);
   const base = totalEur / coinRates.eur;
   // Add a small random offset (0.000001 – 0.000999) to make the amount unique
   // so the admin can match each blockchain tx to the correct invoice
