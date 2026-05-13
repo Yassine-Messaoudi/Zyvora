@@ -48,7 +48,13 @@ import {
   Pickaxe,
   Crosshair,
   Globe,
-  Target
+  Target,
+  HelpCircle,
+  Clock,
+  Info,
+  Eye,
+  FileText,
+  Sparkles
 } from "lucide-react";
 import {
   siCounterstrike,
@@ -66,6 +72,64 @@ import "./styles.css";
 const API = "/api";
 const CART_KEY = "zyvory-cart";
 const ADMIN_TOKEN_KEY = "zyvory-admin-token";
+const WISHLIST_KEY = "zyvory-wishlist";
+const RECENT_KEY = "zyvory-recent-products";
+const COOKIE_CONSENT_KEY = "zyvory-cookie-consent";
+const DISCORD_URL = "https://discord.gg/PKWwqG8uYB";
+const SITE_NAME = "Zyvora";
+const SITE_TAGLINE = "Premium Digital Marketplace";
+const SITE_DESCRIPTION = "Buy digital products, gaming accounts, and tools with instant crypto and PayPal delivery. Secure invoices, automatic delivery, and 24/7 support.";
+
+// ── SEO helpers ──
+function setMeta(name, content, attr = "name") {
+  if (typeof document === "undefined" || !content) return;
+  let tag = document.querySelector(`meta[${attr}="${name}"]`);
+  if (!tag) {
+    tag = document.createElement("meta");
+    tag.setAttribute(attr, name);
+    document.head.appendChild(tag);
+  }
+  tag.setAttribute("content", content);
+}
+
+function setLink(rel, href) {
+  if (typeof document === "undefined" || !href) return;
+  let tag = document.querySelector(`link[rel="${rel}"]`);
+  if (!tag) {
+    tag = document.createElement("link");
+    tag.setAttribute("rel", rel);
+    document.head.appendChild(tag);
+  }
+  tag.setAttribute("href", href);
+}
+
+function useDocumentTitle(title, description) {
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const full = title ? `${title} | ${SITE_NAME}` : `${SITE_NAME} — ${SITE_TAGLINE}`;
+    document.title = full;
+    const desc = description || SITE_DESCRIPTION;
+    setMeta("description", desc);
+    setMeta("og:title", full, "property");
+    setMeta("og:description", desc, "property");
+    setMeta("og:type", "website", "property");
+    setMeta("og:site_name", SITE_NAME, "property");
+    setMeta("twitter:card", "summary_large_image");
+    setMeta("twitter:title", full);
+    setMeta("twitter:description", desc);
+    if (typeof window !== "undefined") {
+      setLink("canonical", window.location.origin + window.location.pathname);
+      setMeta("og:url", window.location.href, "property");
+    }
+  }, [title, description]);
+}
+
+function useScrollToTop(deps = []) {
+  useEffect(() => {
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "instant" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+}
 
 const CartContext = createContext(null);
 const CurrencyContext = createContext(null);
@@ -282,7 +346,10 @@ function Shell({ children }) {
   const nav = [
     ["/", "Home"],
     ["/products", "Products"],
-    ["/#reviews", "Reviews"]
+    ["/categories", "Categories"],
+    ["/track", "Track"],
+    ["/faq", "FAQ"],
+    ["/support", "Support"]
   ];
   if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) {
     return <>{children}</>;
@@ -312,7 +379,7 @@ function Shell({ children }) {
                 </Link>
               )
             )}
-            <a href="https://discord.gg/PKWwqG8uYB" className="discord-nav-link" aria-label="Join Discord">
+            <a href={DISCORD_URL} className="discord-nav-link" aria-label="Join Discord">
               <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true" fill="currentColor">
                 <path d={siDiscord.path} />
               </svg>
@@ -353,7 +420,7 @@ function Shell({ children }) {
                   </Link>
                 )
               )}
-              <a href="https://discord.gg/PKWwqG8uYB" className="mobile-link">
+              <a href={DISCORD_URL} className="mobile-link">
                 Discord
               </a>
               <button type="button" className="mobile-link" onClick={() => { setOpen(false); setCartOpen(true); }}>
@@ -369,6 +436,7 @@ function Shell({ children }) {
       {cartOpen && <CartDrawer cart={cart} onClose={() => setCartOpen(false)} />}
       <main className="site-main">{children}</main>
       <Footer />
+      <CookieConsentBanner />
     </div>
   );
 }
@@ -448,10 +516,17 @@ function Router() {
   if (pathname === "/terms") return <PolicyPage type="terms" />;
   if (pathname === "/privacy") return <PolicyPage type="privacy" />;
   if (pathname === "/support") return <SupportPage />;
+  if (pathname === "/track") return <TrackOrderPage />;
+  if (pathname === "/faq") return <FaqPage />;
+  if (pathname === "/refund" || pathname === "/refunds") return <RefundPage />;
+  if (pathname === "/cookies" || pathname === "/cookie-policy") return <CookiesPage />;
+  if (pathname === "/categories") return <CategoriesPage />;
+  if (pathname.startsWith("/browse/")) return <BrowseCategoryPage category={pathname.split("/")[2]} />;
   return <NotFound />;
 }
 
 function HomePage() {
+  useDocumentTitle("", "Premium digital products, gaming accounts, license keys, and tools with instant crypto and PayPal delivery.");
   const [reviews, setReviews] = useState([]);
   useEffect(() => {
     api("/reviews")
@@ -505,7 +580,7 @@ function HeroSection() {
             <Link href="/products" className="primary-btn">
               <Package className="h-5 w-5" /> Browse Products
             </Link>
-            <a href="https://discord.gg/Zhd6unzQGm" className="secondary-btn discord-hero-btn" aria-label="Join Discord">
+            <a href={DISCORD_URL} className="secondary-btn discord-hero-btn" aria-label="Join Discord">
               <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true" fill="currentColor">
                 <path d={siDiscord.path} />
               </svg>
@@ -782,6 +857,7 @@ function Stars({ rating, compact = false }) {
 }
 
 function ProductsPage() {
+  useDocumentTitle("Products", "Browse all digital products: gaming accounts, license keys, tools, scripts, and more with instant delivery.");
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [search, setSearch] = useState("");
@@ -913,6 +989,7 @@ function ProductDetail({ slug }) {
   const [product, setProduct] = useState(null);
   const [qty, setQty] = useState(1);
   const cart = useCart();
+  useDocumentTitle(product?.name || "Product", product?.shortDescription || product?.description?.slice(0, 160));
   const route = useRouteContext();
   const navigate = route.navigate;
   useEffect(() => {
@@ -1043,6 +1120,7 @@ function InfoList({ title, items }) {
 }
 
 function CartPage() {
+  useDocumentTitle("Cart", "Review items in your cart before checkout.");
   const cart = useCart();
   return (
     <section className="mx-auto max-w-5xl px-4 py-12">
@@ -1121,6 +1199,7 @@ const paymentMethods = [
 ];
 
 function CheckoutPage() {
+  useDocumentTitle("Checkout", "Secure checkout with crypto, PayPal, or wallet balance. Instant delivery after payment confirmation.");
   const cart = useCart();
   const route = useRouteContext();
   const [form, setForm] = useState({ email: "", discord: "", couponCode: "", paymentMethod: "LTC", agreedToTerms: false, newsletter: false });
@@ -1322,6 +1401,7 @@ async function downloadInvoicePdf(invoice) {
 }
 
 function InvoicePage({ invoiceId }) {
+  useDocumentTitle(`Invoice ${invoiceId}`, "Pay your order securely. Payment is monitored on-chain in real time.");
   const [invoice, setInvoice] = useState(null);
   const [discordLink, setDiscordLink] = useState("");
   const [prices, setPrices] = useState(null);
@@ -1698,6 +1778,7 @@ function OrderDetailView({ order, invoice, customerEmail, onBack }) {
 }
 
 function DashboardPage() {
+  useDocumentTitle("Dashboard", "View your orders, downloads, balance, and reviews.");
   const route = useRouteContext();
   const LOGO = "https://res.cloudinary.com/db4mpxc2k/image/upload/v1778619521/Zyvolalogo_yecrow.png";
   const [step, setStep] = useState("email"); // email | code | dashboard
@@ -1750,7 +1831,16 @@ function DashboardPage() {
   const paidCount = paidOrders.length;
   const balance = data?.customer?.balance || 0;
   const reviewCount = data?.reviewCount || 0;
-  const recentOrders = paidOrders.slice(-5).reverse();
+  const [dashSearch, setDashSearch] = useState("");
+  const searchLower = dashSearch.trim().toLowerCase();
+  const matchesSearch = (order) => {
+    if (!searchLower) return true;
+    if (order.id?.toLowerCase().includes(searchLower)) return true;
+    if (order.invoiceId?.toLowerCase().includes(searchLower)) return true;
+    const items = typeof order.items === "string" ? (() => { try { return JSON.parse(order.items); } catch { return []; } })() : (order.items || []);
+    return items.some((i) => (i.name || i.productName || "").toLowerCase().includes(searchLower));
+  };
+  const recentOrders = paidOrders.filter(matchesSearch).slice(-5).reverse();
 
   // Downloads: extract delivered items from orders
   const downloads = paidOrders.flatMap(order => {
@@ -1814,7 +1904,11 @@ function DashboardPage() {
           </Link>
           <div className="cd-topbar-search">
             <Search className="h-4 w-4" />
-            <input placeholder="Search for orders, tickets, products..." readOnly />
+            <input
+              value={dashSearch}
+              onChange={(e) => setDashSearch(e.target.value)}
+              placeholder="Search your orders by ID or product..."
+            />
           </div>
           <div className="cd-topbar-right">
             <div className="cd-lang-wrap">
@@ -2013,7 +2107,7 @@ function DashboardPage() {
                   <h1>Support Tickets</h1>
                   <p>Manage your support tickets and get help from our team</p>
                 </div>
-                <a href="https://discord.gg/PKWwqG8uYB" target="_blank" rel="noopener noreferrer" className="cd-create-ticket-btn">
+                <a href={DISCORD_URL} target="_blank" rel="noopener noreferrer" className="cd-create-ticket-btn">
                   <Plus className="h-4 w-4" /> Create ticket
                 </a>
               </div>
@@ -2021,7 +2115,7 @@ function DashboardPage() {
                 <MessageCircle className="h-10 w-10 text-slate-500" />
                 <h3>No support tickets</h3>
                 <p>You haven't created any support tickets yet.</p>
-                <a href="https://discord.gg/PKWwqG8uYB" target="_blank" rel="noopener noreferrer" className="cd-create-ticket-btn" style={{marginTop:"1rem"}}>
+                <a href={DISCORD_URL} target="_blank" rel="noopener noreferrer" className="cd-create-ticket-btn" style={{marginTop:"1rem"}}>
                   <Plus className="h-4 w-4" /> Create ticket
                 </a>
               </div>
@@ -3304,7 +3398,7 @@ function FaqSection() {
             <strong>Our customer support is available 24/7</strong>
             <p>Average answer time: <span>10 minutes</span></p>
           </div>
-          <a href="https://discord.gg/Zhd6unzQGm" className="faq-support-button">
+          <a href={DISCORD_URL} className="faq-support-button">
             <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true" fill="currentColor">
               <path d={siDiscord.path} />
             </svg>
@@ -3330,47 +3424,363 @@ function FaqSection() {
 
 function PolicyPage({ type }) {
   const isTerms = type === "terms";
+  useDocumentTitle(isTerms ? "Terms of Service" : "Privacy Policy");
   return (
-    <section className="mx-auto max-w-4xl px-4 py-12">
-      <SectionHeading eyebrow="Policy" title={isTerms ? "Terms of Service" : "Privacy Policy"} />
-      <div className="policy-copy mt-8">
-        {isTerms ? (
-          <>
-            <p>Digital products are delivered electronically. Customers are responsible for confirming product compatibility before purchase.</p>
-            <p>Crypto invoices must be paid with the exact amount before expiration. Underpaid, overpaid, failed, or expired invoices require support review.</p>
-            <p>Refunds are handled case by case for invalid stock, duplicate delivery, or products that cannot be replaced.</p>
-          </>
-        ) : (
-          <>
-            <p>Customer email, invoice records, delivery logs, and support identifiers are stored for order fulfillment and fraud prevention.</p>
-            <p>Private keys, seed phrases, wallet secrets, API secrets, and SMTP credentials belong only in server environment variables.</p>
-            <p>Payment checks are performed on the backend. Admin access requires authentication and should be served over HTTPS in production.</p>
-          </>
-        )}
-      </div>
-    </section>
+    <div>
+      <PageHero eyebrow="Policy" title={isTerms ? "Terms of Service" : "Privacy Policy"} lede={isTerms ? "The rules of using the Zyvora marketplace." : "How we collect, use, and protect your data."} icon={FileText} />
+      <section className="mx-auto max-w-4xl px-4 py-12">
+        <div className="policy-copy">
+          {isTerms ? (
+            <>
+              <p>Digital products are delivered electronically. Customers are responsible for confirming product compatibility before purchase.</p>
+              <p>Crypto invoices must be paid with the exact amount before expiration. Underpaid, overpaid, failed, or expired invoices require support review.</p>
+              <p>Refunds are handled case by case for invalid stock, duplicate delivery, or products that cannot be replaced.</p>
+            </>
+          ) : (
+            <>
+              <p>Private keys, seed phrases, wallet secrets, API secrets, and SMTP credentials belong only in server environment variables.</p>
+              <p>Payment checks are performed on the backend. Admin access requires authentication and should be served over HTTPS in production.</p>
+            </>
+          )}
+        </div>
+      </section>
+    </div>
   );
 }
 
 function SupportPage() {
+  useDocumentTitle("Support — Get Help", "Get help from Zyvora support. Discord tickets, order tracking, FAQ, and dashboard access.");
+  const cards = [
+    { icon: MessageCircle, title: "Discord Support", desc: "Open a ticket with your invoice ID and email. Replies typically in under 10 minutes.", href: DISCORD_URL, external: true, badge: "Fastest" },
+    { icon: Package, title: "Track Order", desc: "Look up the status of any order using your Order ID or checkout email.", href: "/track" },
+    { icon: UserCircle, title: "Customer Dashboard", desc: "Sign in with your email to view all orders, downloads, balance, and reviews.", href: "/dashboard" },
+    { icon: HelpCircle, title: "FAQ", desc: "Common questions about payments, delivery, replacements, and account security.", href: "/faq" },
+    { icon: ShieldCheck, title: "Refund Policy", desc: "How replacements, refunds, and disputes are handled for digital goods.", href: "/refund" },
+    { icon: FileText, title: "Terms & Privacy", desc: "Read our Terms of Service and Privacy Policy.", href: "/terms" }
+  ];
   return (
-    <section className="mx-auto max-w-5xl px-4 py-12">
-      <SectionHeading eyebrow="Support" title="Get Help" />
-      <div className="mt-8 grid gap-4 md:grid-cols-2">
-        <a className="support-card" href="https://discord.gg/Zhd6unzQGm">
-          <MessageCircle className="h-7 w-7 text-blue-300" />
-          <h3>Discord Support</h3>
-          <p>Open a ticket with your invoice ID and email address.</p>
-          <ExternalLink className="h-5 w-5" />
-        </a>
-        <a className="support-card" href="mailto:support@zyvory.local">
-          <Mail className="h-7 w-7 text-blue-300" />
-          <h3>Email Support</h3>
-          <p>Use email for delivery issues, replacement checks, and manual orders.</p>
-          <ExternalLink className="h-5 w-5" />
-        </a>
+    <div>
+      <PageHero eyebrow="Support" title="How can we help?" lede="Pick the channel that fits your question. Our team is online 24/7 on Discord." />
+      <section className="mx-auto max-w-6xl px-4 py-12">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {cards.map((card) => {
+            const Icon = card.icon;
+            const Wrap = card.external ? "a" : Link;
+            const extra = card.external ? { target: "_blank", rel: "noopener noreferrer" } : {};
+            return (
+              <Wrap key={card.title} className="support-card" href={card.href} {...extra}>
+                <ExternalLink className="support-card-arrow h-4 w-4" />
+                <span className="support-card-icon"><Icon className="h-6 w-6" /></span>
+                <h3>{card.title}</h3>
+                <p>{card.desc}</p>
+                {card.badge && <span className="support-card-badge">{card.badge}</span>}
+              </Wrap>
+            );
+          })}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function TrackOrderPage() {
+  useDocumentTitle("Track Order", "Look up the status of any order using your Order ID and email.");
+  const [orderId, setOrderId] = useState("");
+  const [email, setEmail] = useState("");
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const lookup = async (e) => {
+    e.preventDefault();
+    setError(""); setResult(null);
+    if (!orderId.trim() && !email.trim()) { setError("Enter your Order ID or Email."); return; }
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (orderId.trim()) params.set("orderId", orderId.trim());
+      if (email.trim()) params.set("email", email.trim());
+      const res = await api(`/track?${params.toString()}`);
+      if (!res?.found) { setError("No order found with those details. Check your spelling or sign in to your dashboard."); return; }
+      setResult(res);
+    } catch (err) {
+      setError(err.message || "Lookup failed. Please try again.");
+    } finally { setLoading(false); }
+  };
+
+  const statusMeta = (status) => {
+    const s = String(status || "").toLowerCase();
+    if (s === "completed" || s === "paid" || s === "delivered") return { color: "#22c55e", icon: CheckCircle2, label: "Completed" };
+    if (s === "awaiting_payment" || s === "pending" || s === "unpaid") return { color: "#f59e0b", icon: Clock, label: "Awaiting payment" };
+    if (s === "expired" || s === "failed" || s === "cancelled") return { color: "#ef4444", icon: AlertTriangle, label: status };
+    return { color: "#60a5fa", icon: Package, label: status || "Processing" };
+  };
+
+  const order = result?.order;
+  const invoice = result?.invoice;
+  const meta = statusMeta(order?.status || invoice?.status);
+  const StatusIcon = meta.icon;
+
+  return (
+    <div>
+      <PageHero eyebrow="Order Lookup" title="Track Your Order" lede="Enter the Order ID we sent in your delivery email, or the email used at checkout." />
+      <section className="mx-auto max-w-5xl px-4 py-12 grid gap-6 lg:grid-cols-[1.1fr_1fr]">
+        <form className="panel-glass p-6 md:p-8 grid gap-4" onSubmit={lookup}>
+          <div className="flex items-center gap-3 mb-2">
+            <span className="track-input-icon"><Search className="h-5 w-5" /></span>
+            <div>
+              <h3 className="text-lg font-bold text-white">Order Lookup</h3>
+              <p className="text-xs text-[#9CB6C9]">We never share or expose customer data.</p>
+            </div>
+          </div>
+          <label className="field">
+            <span>Order ID</span>
+            <input value={orderId} onChange={(e) => setOrderId(e.target.value)} placeholder="ORD-XXXX or full UUID" autoComplete="off" />
+          </label>
+          <div className="track-divider"><span>or</span></div>
+          <label className="field">
+            <span>Email used at checkout</span>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@example.com" autoComplete="email" />
+          </label>
+          <button className="primary-btn" disabled={loading}>{loading ? "Looking up..." : <><Search className="h-4 w-4" /> Track Order</>}</button>
+          {error && <div className="error-box flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> {error}</div>}
+          <div className="track-hint">
+            <Lock className="h-3.5 w-3.5" />
+            Need more details? <Link href="/dashboard">Sign in to dashboard</Link> or <a href={DISCORD_URL} target="_blank" rel="noopener noreferrer">contact support</a>.
+          </div>
+        </form>
+
+        <div className="track-result-pane">
+          {!result && (
+            <div className="panel-glass p-8 text-center track-empty">
+              <div className="track-empty-icon"><Package className="h-8 w-8" /></div>
+              <h3>Your order details will appear here</h3>
+              <p>Once we find your order, you'll see its status, amount, and how to access it.</p>
+              <div className="track-empty-features">
+                <span><ShieldCheck className="h-4 w-4" /> Privacy-safe</span>
+                <span><Zap className="h-4 w-4" /> Live status</span>
+                <span><Clock className="h-4 w-4" /> 24/7 lookup</span>
+              </div>
+            </div>
+          )}
+          {result && (
+            <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="panel-glass p-6 md:p-7 track-result">
+              <div className="track-result-header">
+                <span className="track-result-status" style={{ color: meta.color, background: `${meta.color}1a`, borderColor: `${meta.color}40` }}>
+                  <StatusIcon className="h-4 w-4" /> {meta.label}
+                </span>
+                <strong>Order Found</strong>
+              </div>
+              <dl className="track-result-grid">
+                <div><dt>Order ID</dt><dd className="font-mono">{order?.id || invoice?.id}</dd></div>
+                {order?.invoiceId && <div><dt>Invoice ID</dt><dd className="font-mono">{order.invoiceId}</dd></div>}
+                <div><dt>Total</dt><dd>{money(order?.totalUsd || invoice?.totalUsd || 0)}</dd></div>
+                {invoice?.selectedCoin && <div><dt>Paid in</dt><dd>{invoice.selectedCoin}</dd></div>}
+                {order?.itemCount != null && <div><dt>Items</dt><dd>{order.itemCount}</dd></div>}
+                <div><dt>Created</dt><dd>{new Date(order?.createdAt || invoice?.createdAt).toLocaleString()}</dd></div>
+              </dl>
+              <div className="track-result-actions">
+                <Link href={`/dashboard?email=${encodeURIComponent(email)}`} className="primary-btn"><UserCircle className="h-4 w-4" /> Open in Dashboard</Link>
+                {invoice?.id && <Link href={`/invoice/${invoice.id}`} className="secondary-btn"><FileText className="h-4 w-4" /> View Invoice</Link>}
+              </div>
+            </motion.div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function FaqPage() {
+  useDocumentTitle("FAQ", "Frequently asked questions about payments, delivery, refunds and support.");
+  return (
+    <div>
+      <PageHero eyebrow="Help" title="Frequently Asked Questions" lede="Quick answers to the most common questions about payments, delivery, refunds, and account safety." icon={HelpCircle} />
+      <FaqSection />
+    </div>
+  );
+}
+
+function RefundPage() {
+  useDocumentTitle("Refund Policy", "Our policy on refunds, replacements, and disputes for digital products.");
+  const sections = [
+    { icon: ShieldCheck, color: "#22c55e", title: "Replacements available for", items: ["Invalid stock or expired accounts", "Duplicate delivery of the same item", "Accounts that cannot be accessed on first login", "License keys that fail to activate", "Files that are corrupted or incomplete"] },
+    { icon: MessageCircle, color: "#60a5fa", title: "How to request a replacement", items: ["Open a Discord support ticket with your Order ID and email", "Include a short video or screenshot showing the issue", "Most replacements are processed within 30 minutes", "If we cannot replace, store credit is added to your balance"] },
+    { icon: AlertTriangle, color: "#f59e0b", title: "Not covered", items: ["Bans caused by user actions or misuse", "Products incompatible with your setup if specs were listed", "Buyer's remorse or wrong-item purchases", "Items used outside their intended scope"] },
+    { icon: Lock, color: "#ef4444", title: "Chargebacks & disputes", items: ["Always contact support first — we resolve almost all issues in minutes", "Filing a chargeback results in a permanent ban from the store and Discord", "Confirmed crypto payments cannot be reversed; we replace faulty items instead"] }
+  ];
+  return (
+    <div>
+      <PageHero eyebrow="Policy" title="Refund & Replacement Policy" lede="Digital products are final once delivered. Here's how we handle issues fairly and quickly." icon={ShieldCheck} />
+      <section className="mx-auto max-w-5xl px-4 py-12 grid gap-5">
+        <div className="policy-callout">
+          <Info className="h-5 w-5" />
+          <div><strong>Digital goods are non-returnable.</strong> We do not refund for buyer's remorse, wrong purchases, or items that work as described. We <em>do</em> replace anything faulty — see below.</div>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          {sections.map((sec) => {
+            const Icon = sec.icon;
+            return (
+              <div key={sec.title} className="policy-card">
+                <div className="policy-card-head">
+                  <span className="policy-card-icon" style={{ background: `${sec.color}1a`, color: sec.color, borderColor: `${sec.color}40` }}><Icon className="h-5 w-5" /></span>
+                  <h3>{sec.title}</h3>
+                </div>
+                <ul>
+                  {sec.items.map((it) => (<li key={it}><CheckCircle2 className="h-4 w-4" style={{ color: sec.color }} />{it}</li>))}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+        <div className="policy-cta">
+          <div><strong>Have an issue with an order?</strong><span>Our support team is online 24/7 on Discord — average reply under 10 minutes.</span></div>
+          <a className="primary-btn" href={DISCORD_URL} target="_blank" rel="noopener noreferrer"><MessageCircle className="h-4 w-4" /> Open Support Ticket</a>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function CookiesPage() {
+  useDocumentTitle("Cookie Policy", "How we use cookies and similar technologies on Zyvora.");
+  const groups = [
+    { color: "#22c55e", icon: ShieldCheck, title: "Strictly necessary", desc: "These keep your cart, login session, and currency preference. The site does not function without them.", items: [
+      ["zyvory-cart", "Items in your cart"],
+      ["zyvory-admin-token", "Admin session (only set for admins)"],
+      ["zyvory-wishlist", "Items you saved for later"],
+      ["zyvory-recent-products", "Your recently viewed products"],
+      ["zyvory-cookie-consent", "Remembers you've accepted this notice"]
+    ]},
+    { color: "#60a5fa", icon: Eye, title: "Analytics", desc: "We do not currently use third-party analytics, advertising, or tracking cookies.", items: [] },
+    { color: "#a78bfa", icon: Settings, title: "Your choices", desc: "You can clear cookies any time from your browser settings. Clearing them will empty your cart and sign you out of the dashboard.", items: [] }
+  ];
+  return (
+    <div>
+      <PageHero eyebrow="Policy" title="Cookie Policy" lede="How we use cookies and local storage on Zyvora. Plain language, no fine print." icon={ShieldCheck} />
+      <section className="mx-auto max-w-5xl px-4 py-12 grid gap-5">
+        {groups.map((g) => {
+          const Icon = g.icon;
+          return (
+            <div key={g.title} className="policy-card">
+              <div className="policy-card-head">
+                <span className="policy-card-icon" style={{ background: `${g.color}1a`, color: g.color, borderColor: `${g.color}40` }}><Icon className="h-5 w-5" /></span>
+                <div>
+                  <h3>{g.title}</h3>
+                  <p className="policy-card-sub">{g.desc}</p>
+                </div>
+              </div>
+              {g.items.length > 0 && (
+                <div className="cookie-key-list">
+                  {g.items.map(([key, label]) => (
+                    <div className="cookie-key-row" key={key}>
+                      <code>{key}</code>
+                      <span>{label}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </section>
+    </div>
+  );
+}
+
+function CategoriesPage() {
+  useDocumentTitle("Categories", "Browse digital products by category — accounts, games, tools, methods, and more.");
+  const [categories, setCategories] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [search, setSearch] = useState("");
+  useEffect(() => {
+    api("/categories").then(setCategories).catch(() => setCategories([]));
+    api("/products").then(setProducts).catch(() => setProducts([]));
+  }, []);
+  const totalProducts = products.length;
+  const totalCategories = browseCategories.length;
+  const visible = browseCategories.filter((b) => !search.trim() || b.name.toLowerCase().includes(search.toLowerCase()));
+  return (
+    <div>
+      <PageHero eyebrow="Browse" title="All Categories" lede="Pick a category to explore everything we stock — from gaming accounts to scripts and tools.">
+        <div className="page-hero-stats">
+          <div><strong>{totalCategories}</strong><span>Categories</span></div>
+          <div><strong>{totalProducts}+</strong><span>Products</span></div>
+          <div><strong>24/7</strong><span>Support</span></div>
+        </div>
+      </PageHero>
+      <section className="mx-auto max-w-7xl px-4 py-12">
+        <div className="categories-toolbar">
+          <label className="categories-search">
+            <Search className="h-4 w-4" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search categories..." />
+          </label>
+          <Link href="/products" className="secondary-btn"><Package className="h-4 w-4" /> All Products</Link>
+        </div>
+        <div className="zy-category-grid mt-6">
+          {visible.map((item, idx) => {
+            const Icon = item.icon || categoryIcons[item.category] || Boxes;
+            const c = item.color || "#6366f1";
+            const count = products.filter((p) => {
+              const cat = categories.find((cc) => cc.name === p.category);
+              return cat?.tag === item.name;
+            }).length;
+            return (
+              <motion.div key={item.name} initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28, delay: Math.min(idx * 0.03, 0.4) }} whileHover={{ y: -6 }}>
+                <Link href={`/products?filter=${encodeURIComponent(item.name)}`} className="zy-category-card" style={{"--cat-color": c}}>
+                  <span className={item.brand ? "category-logo brand-logo" : "category-logo"} style={{color: c, filter: `drop-shadow(0 0 12px ${c}40)`}}>
+                    {item.brand ? <BrandIcon icon={item.brand} /> : <Icon className="h-11 w-11" strokeWidth={2.15} />}
+                  </span>
+                  <span>{item.name}</span>
+                  <span className="zy-cat-count">{count} item{count === 1 ? "" : "s"}</span>
+                </Link>
+              </motion.div>
+            );
+          })}
+          {visible.length === 0 && (
+            <div className="col-span-full text-center py-12 text-[#9CB6C9]">No categories match "{search}".</div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function BrowseCategoryPage({ category }) {
+  const decoded = decodeURIComponent(category || "");
+  useDocumentTitle(decoded, `Browse all ${decoded} products with instant delivery on ${SITE_NAME}.`);
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.location.replace(`/products?filter=${encodeURIComponent(decoded)}`);
+    }
+  }, [decoded]);
+  return <Loading />;
+}
+
+function CookieConsentBanner() {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    try { if (!localStorage.getItem(COOKIE_CONSENT_KEY)) setShow(true); } catch {}
+  }, []);
+  const accept = () => {
+    try { localStorage.setItem(COOKIE_CONSENT_KEY, JSON.stringify({ accepted: true, at: Date.now() })); } catch {}
+    setShow(false);
+  };
+  if (!show) return null;
+  return (
+    <div className="cookie-banner" role="dialog" aria-label="Cookie notice">
+      <div className="cookie-banner-inner">
+        <span className="cookie-banner-icon"><ShieldCheck className="h-5 w-5" /></span>
+        <div className="cookie-text">
+          <strong>We use essential cookies</strong>
+          <span>Only to keep your cart, session and preferences. No tracking, no ads. <Link href="/cookies">Learn more</Link>.</span>
+        </div>
+        <div className="cookie-actions">
+          <button className="small-btn" onClick={accept}>Decline</button>
+          <button className="primary-btn" onClick={accept}><CheckCircle2 className="h-4 w-4" /> Accept</button>
+        </div>
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -3384,7 +3794,7 @@ function Footer() {
               <img src="/images/zyvola-logo.png" alt="Zyvory logo" />
             </span>
             <span>
-              <span className="brand-name">Zyvory</span>
+              <span className="brand-name">{SITE_NAME}</span>
               <span className="brand-subtitle">Digital Market</span>
             </span>
           </Link>
@@ -3392,16 +3802,33 @@ function Footer() {
             Premium digital products, crypto invoices, protected delivery records, and a customer dashboard built for serious gaming commerce.
           </p>
         </div>
-        <div className="footer-links">
-          <Link href="/terms">Terms</Link>
-          <Link href="/privacy">Privacy</Link>
-          <Link href="/support">Support</Link>
-          <a href="https://discord.gg/Zhd6unzQGm">Discord</a>
+        <div className="footer-columns">
+          <div className="footer-col">
+            <h4>Shop</h4>
+            <Link href="/products">All Products</Link>
+            <Link href="/categories">Categories</Link>
+            <Link href="/cart">Cart</Link>
+            <Link href="/dashboard">My Dashboard</Link>
+          </div>
+          <div className="footer-col">
+            <h4>Support</h4>
+            <Link href="/track">Track Order</Link>
+            <Link href="/faq">FAQ</Link>
+            <Link href="/support">Contact</Link>
+            <a href={DISCORD_URL} target="_blank" rel="noopener noreferrer">Discord</a>
+          </div>
+          <div className="footer-col">
+            <h4>Legal</h4>
+            <Link href="/terms">Terms</Link>
+            <Link href="/privacy">Privacy</Link>
+            <Link href="/refund">Refund Policy</Link>
+            <Link href="/cookies">Cookies</Link>
+          </div>
         </div>
       </div>
       <div className="container-shell footer-bottom">
-        <span>Copyright 2026 Zyvory Digital Market.</span>
-        <span>Secure checkout logic. Server-side payment verification.</span>
+        <span>© {new Date().getFullYear()} {SITE_NAME}. All rights reserved.</span>
+        <span>Secure checkout. Server-side payment verification.</span>
       </div>
     </footer>
   );
@@ -3423,12 +3850,28 @@ function ErrorMessage({ message }) {
 }
 
 function NotFound() {
+  useDocumentTitle("Page not found");
   return (
-    <section className="mx-auto max-w-3xl px-4 py-20">
-      <h1 className="text-4xl font-black text-white">Page not found</h1>
-      <Link href="/" className="primary-btn mt-6">
-        Back Home
-      </Link>
+    <section className="mx-auto max-w-3xl px-4 py-20 text-center">
+      <div className="text-7xl font-black bg-clip-text" style={{background:"linear-gradient(135deg,#60a5fa,#a78bfa)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>404</div>
+      <h1 className="mt-4 text-3xl font-black text-white">Page not found</h1>
+      <p className="mt-3 text-[#9CB6C9]">The page you're looking for doesn't exist or has been moved.</p>
+      <div className="mt-8 flex flex-wrap justify-center gap-3">
+        <Link href="/" className="primary-btn"><ChevronLeft className="h-4 w-4" /> Back Home</Link>
+        <Link href="/products" className="secondary-btn"><Package className="h-4 w-4" /> Browse Products</Link>
+        <Link href="/track" className="secondary-btn"><Search className="h-4 w-4" /> Track Order</Link>
+        <a href={DISCORD_URL} target="_blank" rel="noopener noreferrer" className="secondary-btn"><MessageCircle className="h-4 w-4" /> Support</a>
+      </div>
+      <div className="mt-12">
+        <p className="text-xs uppercase tracking-wider text-[#5e6f86] mb-4">Popular sections</p>
+        <div className="flex flex-wrap justify-center gap-2">
+          <Link href="/categories" className="nav-link">Categories</Link>
+          <Link href="/faq" className="nav-link">FAQ</Link>
+          <Link href="/dashboard" className="nav-link">Dashboard</Link>
+          <Link href="/cart" className="nav-link">Cart</Link>
+          <Link href="/support" className="nav-link">Support</Link>
+        </div>
+      </div>
     </section>
   );
 }

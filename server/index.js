@@ -22,9 +22,9 @@ import {
   getApprovedReviews, getReviewsByProduct, createReview, getAllReviews, updateReviewStatus, deleteReview,
   findOrCreateCustomer, getCustomerByEmail, updateCustomerLastOrder, deductCustomerBalance, getAllCustomers, updateCustomerBalance,
   getActiveCoupon, getAllCoupons, createCoupon, updateCoupon, deleteCoupon,
-  addActivityLog, addDeliveryLog, getAdminSummary
+  addActivityLog, addDeliveryLog, getAdminSummary, getRecentActivityLogs
 } from "./store.js";
-import { getWalletAddress, getPoolAddress, calculateCryptoAmount, createQrData, supportedCoins, getLivePrices, convertFiat } from "./payments.js";
+import { getWalletAddress, calculateCryptoAmount, createQrData, supportedCoins, getLivePrices, convertFiat } from "./payments.js";
 import { getIncomingTransactions, findMatchingPayment, getRequiredConfirmations } from "./blockchain.js";
 import { sendDeliveryEmail, sendDiscordWebhook, sendVerificationEmail } from "./delivery.js";
 
@@ -178,42 +178,86 @@ setInterval(() => {
 
 // ── Blockchain payment detection loop ──
 
+// Group pending invoices by coin+address so we only hit each blockchain
+// provider ONCE per address per cycle, regardless of how many invoices share
+// that address (which is the common case now that we use single address per coin).
 async function checkPendingPayments() {
   if (process.env.PAYMENT_MODE === "mock") return;
   const pending = await getPendingInvoices();
-  for (const invoice of pending) {
-    if (!invoice.depositAddress || !invoice.selectedCoin) continue;
-    if (!["LTC", "BTC", "SOL", "ETH"].includes(invoice.selectedCoin)) continue;
+  const cryptoInvoices = pending.filter((inv) =>
+    inv.depositAddress &&
+    inv.selectedCoin &&
+    ["LTC", "BTC", "SOL", "ETH"].includes(inv.selectedCoin)
+  );
+  if (!cryptoInvoices.length) return;
+
+  // Group by coin:address
+  const groups = new Map();
+  for (const inv of cryptoInvoices) {
+    const key = `${inv.selectedCoin}:${inv.depositAddress}`;
+    if (!groups.has(key)) groups.set(key, { coin: inv.selectedCoin, address: inv.depositAddress, invoices: [] });
+    groups.get(key).invoices.push(inv);
+  }
+
+  for (const { coin, address, invoices } of groups.values()) {
     try {
-      const txs = await getIncomingTransactions(invoice.selectedCoin, invoice.depositAddress);
-      const match = findMatchingPayment(txs, invoice.expectedCryptoAmount);
-      if (match) {
-        const required = getRequiredConfirmations(invoice.selectedCoin);
-        // Always update tx info
+      const txs = await getIncomingTransactions(coin, address);
+      if (!txs.length) continue;
+
+      // Match each invoice independently against the list of incoming txs.
+      // Track which tx hashes have already been claimed to prevent the same
+      // deposit being assigned to two invoices.
+      const claimedTxHashes = new Set(
+        invoices.map((i) => i.transactionId).filter(Boolean)
+      );
+      const availableTxs = txs.filter((tx) => !claimedTxHashes.has(tx.txHash));
+
+      for (const invoice of invoices) {
+        const required = getRequiredConfirmations(coin);
+        // If we already know which tx belongs to this invoice, just refresh its confirmation count
+        const knownTx = invoice.transactionId && txs.find((t) => t.txHash === invoice.transactionId);
+        const match = knownTx || findMatchingPayment(availableTxs, invoice.expectedCryptoAmount);
+        if (!match) continue;
+
+        if (!knownTx) {
+          claimedTxHashes.add(match.txHash);
+          const idx = availableTxs.findIndex((t) => t.txHash === match.txHash);
+          if (idx >= 0) availableTxs.splice(idx, 1);
+        }
+
         await updateInvoice(invoice.id, {
           transactionId: match.txHash,
           confirmationCount: match.confirmations
         });
-        if (match.confirmations >= required) {
-          await updateInvoice(invoice.id, { status: "paid", transactionId: match.txHash, confirmationCount: match.confirmations });
+
+        if (match.confirmations >= required && invoice.status !== "paid") {
+          await updateInvoice(invoice.id, {
+            status: "paid",
+            transactionId: match.txHash,
+            confirmationCount: match.confirmations
+          });
           await addInvoiceEvent(invoice.id, "payment_confirmed");
           const confirmed = await getInvoiceById(invoice.id);
           await completeInvoice(confirmed);
           console.log(`[payments] ✓ Invoice ${invoice.id} confirmed — TX: ${match.txHash.slice(0, 16)}... (${match.confirmations} confs)`);
-        } else {
+        } else if (!knownTx) {
+          await addInvoiceEvent(invoice.id, "payment_detected");
           console.log(`[payments] ◎ Invoice ${invoice.id} detected — ${match.confirmations}/${required} confirmations`);
+        } else if (match.confirmations !== invoice.confirmationCount) {
+          console.log(`[payments] · Invoice ${invoice.id} confirmation update — ${match.confirmations}/${required}`);
         }
       }
     } catch (err) {
-      console.error(`[payments] Check failed for ${invoice.id}:`, err.message);
+      console.error(`[payments] ${coin} check failed for ${address.slice(0, 12)}...:`, err.message);
     }
-    await new Promise((r) => setTimeout(r, 500));
+    // Small delay between groups so we don't hammer providers
+    await new Promise((r) => setTimeout(r, 300));
   }
 }
 
 setInterval(() => {
   checkPendingPayments().catch((error) => console.error("payment check failed", error));
-}, 45_000);
+}, 30_000);
 
 // ── Public routes ──
 
@@ -290,6 +334,59 @@ app.get("/api/reviews", async (_req, res) => {
   res.json(await getApprovedReviews());
 });
 
+// Public order lookup — for the /track page.
+// Returns minimal safe info for an order found by ID or by email.
+const trackLimiter = rateLimit({ windowMs: 60_000, limit: 10 });
+app.get("/api/track", trackLimiter, async (req, res) => {
+  try {
+    const { orderId, email } = req.query;
+    if (!orderId && !email) return res.status(400).json({ error: "Provide orderId or email" });
+
+    let order = null;
+    let invoice = null;
+
+    if (orderId) {
+      const all = await getAllOrders();
+      order = all.find((o) => o.id === orderId || o.invoiceId === orderId);
+      if (order) invoice = await getInvoiceById(order.invoiceId);
+      if (!invoice && !order) invoice = await getInvoiceById(orderId);
+    }
+
+    if (!order && email) {
+      const invoices = await getInvoicesByEmail(String(email).toLowerCase().trim());
+      if (invoices.length) {
+        const paidInv = invoices.find((i) => i.status === "paid") || invoices[0];
+        invoice = paidInv;
+        order = await getOrderByInvoiceId(paidInv.id);
+      }
+    }
+
+    if (!order && !invoice) return res.json({ found: false });
+
+    // Strip sensitive fields - never expose delivery items, addresses, or internal data
+    res.json({
+      found: true,
+      order: order ? {
+        id: order.id,
+        invoiceId: order.invoiceId,
+        totalUsd: order.totalUsd,
+        status: order.status,
+        createdAt: order.createdAt,
+        itemCount: Array.isArray(order.items) ? order.items.length : 0
+      } : null,
+      invoice: invoice ? {
+        id: invoice.id,
+        totalUsd: invoice.totalUsd,
+        status: invoice.status,
+        selectedCoin: invoice.selectedCoin,
+        createdAt: invoice.createdAt
+      } : null
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post("/api/invoices", checkoutLimiter, async (req, res) => {
   const schema = z.object({
     email: z.string().email(),
@@ -317,16 +414,13 @@ app.post("/api/invoices", checkoutLimiter, async (req, res) => {
       if (!paypalEmail) throw new Error("PayPal is not configured. Please choose a crypto payment method.");
       depositAddress = paypalEmail;
     } else if (["LTC", "BTC", "SOL", "ETH"].includes(parsed.data.paymentMethod)) {
+      // Single wallet address per coin (from admin Settings).
+      // Each invoice gets a unique sub-satoshi/sub-gwei offset on the amount
+      // so the polling worker can match incoming txs to the correct invoice
+      // without needing one address per invoice.
+      const settings = await getSettings();
+      depositAddress = getWalletAddress(settings, parsed.data.paymentMethod);
       const pendingForCoin = await getInvoicesByCoin(parsed.data.paymentMethod);
-      // Try address pool first, fall back to single wallet address
-      const usedAddresses = pendingForCoin.map((inv) => inv.depositAddress).filter(Boolean);
-      const poolAddr = getPoolAddress(parsed.data.paymentMethod, usedAddresses);
-      if (poolAddr) {
-        depositAddress = poolAddr;
-      } else {
-        const settings = await getSettings();
-        depositAddress = getWalletAddress(settings, parsed.data.paymentMethod);
-      }
       const existingAmounts = pendingForCoin.map((inv) => inv.expectedCryptoAmount);
       expectedCryptoAmount = await calculateCryptoAmount(totalUsd, parsed.data.paymentMethod, existingAmounts);
       const qr = await createQrData(parsed.data.paymentMethod, depositAddress, expectedCryptoAmount, id);
@@ -639,6 +733,77 @@ app.post("/api/admin/orders/:id/resend", auth, async (req, res) => {
     res.json({ success: true, message: "Delivery email resent" });
   } catch (error) {
     res.status(400).json({ error: error.message });
+  }
+});
+
+// ── Bot API (secured with BOT_API_KEY) ──
+function botAuth(req, res, next) {
+  const key = process.env.BOT_API_KEY;
+  if (!key) return res.status(503).json({ error: "Bot API not configured" });
+  const provided = req.headers["x-bot-key"] || req.query.key;
+  if (provided !== key) return res.status(401).json({ error: "Invalid bot key" });
+  next();
+}
+
+app.get("/api/bot/order-lookup", botAuth, async (req, res) => {
+  try {
+    const { orderId, email } = req.query;
+    if (!orderId && !email) return res.status(400).json({ error: "orderId or email required" });
+
+    let order = null;
+    let invoice = null;
+
+    if (orderId) {
+      const allOrders = await getAllOrders();
+      order = allOrders.find(o => o.id === orderId || o.invoiceId === orderId);
+      if (order) invoice = await getInvoiceById(order.invoiceId);
+    }
+
+    if (!order && email) {
+      const invoices = await getInvoicesByEmail(email);
+      if (invoices.length) {
+        const paidInv = invoices.find(i => i.status === "paid") || invoices[0];
+        invoice = paidInv;
+        order = await getOrderByInvoiceId(paidInv.id);
+      }
+    }
+
+    if (!order && !invoice) return res.json({ found: false });
+
+    res.json({
+      found: true,
+      order: order ? {
+        id: order.id,
+        invoiceId: order.invoiceId,
+        customerEmail: order.customerEmail,
+        totalUsd: order.totalUsd,
+        status: order.status,
+        items: order.items,
+        deliveryItems: order.deliveryItems,
+        createdAt: order.createdAt
+      } : null,
+      invoice: invoice ? {
+        id: invoice.id,
+        customerEmail: invoice.customerEmail,
+        selectedCoin: invoice.selectedCoin,
+        totalUsd: invoice.totalUsd,
+        status: invoice.status,
+        createdAt: invoice.createdAt,
+        items: invoice.items
+      } : null
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/bot/logs", botAuth, async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 20, 50);
+    const logs = await getRecentActivityLogs(limit);
+    res.json({ logs });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 

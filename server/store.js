@@ -526,6 +526,17 @@ export async function addActivityLog(type, invoiceId = null, details = null) {
   await query("INSERT INTO activity_logs (type, invoice_id, details) VALUES (?, ?, ?)", [type, invoiceId, details]);
 }
 
+export async function getRecentActivityLogs(limit = 20) {
+  const rows = await query("SELECT id, type, invoice_id, details, created_at FROM activity_logs ORDER BY created_at DESC LIMIT ?", [limit]);
+  return rows.map((row) => ({
+    id: row.id,
+    type: row.type,
+    invoiceId: row.invoice_id,
+    details: row.details,
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : null
+  }));
+}
+
 // ── Delivery Logs ──
 
 export async function addDeliveryLog(data) {

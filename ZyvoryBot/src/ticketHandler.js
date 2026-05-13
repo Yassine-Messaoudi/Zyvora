@@ -4,6 +4,7 @@ import {
   ButtonStyle,
   ChannelType,
   ContainerBuilder,
+  EmbedBuilder,
   MessageFlags,
   ModalBuilder,
   PermissionFlagsBits,
@@ -18,6 +19,7 @@ import {
 } from "discord.js";
 import { ticketTypes } from "./ticketPanel.js";
 import { buildTranscriptAttachment } from "./transcript.js";
+import { lookupOrder, formatOrderStatus, formatCoin, formatDate } from "./orderLookup.js";
 
 const ticketTypeMap = new Map(ticketTypes.map((type) => [type.id, type]));
 
@@ -385,6 +387,74 @@ function formatSubmittedDetails(details = {}) {
   return rows || "No extra details submitted.";
 }
 
+function buildOrderInfoEmbed(data, storeName = "Zyvora") {
+  const order = data.order;
+  const invoice = data.invoice;
+
+  const orderId = order?.id || invoice?.id || "Unknown";
+  const email = order?.customerEmail || invoice?.customerEmail || "Unknown";
+  const status = order ? formatOrderStatus(order.status) : (invoice ? formatOrderStatus(invoice.status) : "Unknown");
+  const coin = invoice?.selectedCoin ? formatCoin(invoice.selectedCoin) : "Unknown";
+  const totalUsd = order?.totalUsd || invoice?.totalUsd || 0;
+  const createdAt = order?.createdAt || invoice?.createdAt;
+
+  const items = order?.items || invoice?.items || [];
+  const productLines = items.map((item) => {
+    const name = item.name || item.productName || "Product";
+    const qty = item.quantity || item.qty || 1;
+    return `> 🔷 **${name}** (${name}) × \`${qty}\``;
+  }).join("\n") || "> No products found";
+
+  const embed = new EmbedBuilder()
+    .setColor(0x5865f2)
+    .setTitle("🔷 Order Confirmed")
+    .setDescription(
+      `We found and verified this order through **${storeName}**.\n` +
+      `Our support team now has the details needed to help you.`
+    )
+    .addFields(
+      { name: "Order ID", value: `\`${orderId}\``, inline: true },
+      { name: "Email", value: `\`${email}\``, inline: true },
+      { name: "Status", value: `\`${status}\``, inline: true },
+      { name: "Payment Method", value: `\`${coin}\``, inline: true },
+      { name: "Amount Paid", value: `\`${totalUsd} eur\``, inline: true },
+      { name: "Payment Completed", value: `\`${formatDate(createdAt)}\``, inline: false },
+      { name: "Products Purchased", value: productLines, inline: false }
+    )
+    .setFooter({ text: `${storeName} – order info` })
+    .setTimestamp();
+
+  return embed;
+}
+
+function orderActionRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("ticket:claim")
+      .setLabel("Claim")
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId("ticket:close")
+      .setLabel("Close Ticket")
+      .setStyle(ButtonStyle.Danger)
+  );
+}
+
+async function tryOrderLookup(channel, details = {}) {
+  const orderId = details["Order ID"] || details["Order / invoice / product"] || "";
+  const email = details["Email"] || "";
+
+  if (!orderId && !email) return;
+
+  const data = await lookupOrder({ orderId, email });
+  if (!data) return;
+
+  const embed = buildOrderInfoEmbed(data);
+  const row = orderActionRow();
+
+  await channel.send({ embeds: [embed], components: [row] });
+}
+
 async function createTicket(interaction, type, details = {}) {
   const existing = interaction.guild.channels.cache.find((channel) => (
     channel.type === ChannelType.GuildText &&
@@ -437,6 +507,10 @@ async function createTicket(interaction, type, details = {}) {
 
   await channel.send(ticketWelcomePanel(type, interaction.user, process.env.STAFF_ROLE_ID));
   await channel.send(`**Submitted by:** ${interaction.user}\n\n${formatSubmittedDetails(details)}\n\nYou can upload screenshots or files directly in this ticket if needed.`);
+
+  await tryOrderLookup(channel, details).catch((err) => {
+    console.warn("[orderLookup] Error during ticket creation lookup:", err.message);
+  });
 
   if (process.env.LOG_CHANNEL_ID) {
     const logChannel = interaction.guild.channels.cache.get(process.env.LOG_CHANNEL_ID);
@@ -492,6 +566,39 @@ export async function handleTicketButton(interaction) {
 
   if (typeId === "close") {
     await closeTicket(interaction);
+    return;
+  }
+
+  if (typeId === "claim") {
+    if (!isTicketChannel(interaction.channel)) {
+      await interaction.reply(ephemeral("Use this inside a ticket channel."));
+      return;
+    }
+
+    if (!isStaff(interaction)) {
+      await interaction.reply(ephemeral("Only staff can claim tickets."));
+      return;
+    }
+
+    await interaction.channel.send(`🎫 **Ticket claimed** by ${interaction.user}. They will be handling this ticket.`);
+
+    const originalMessage = interaction.message;
+    if (originalMessage?.editable) {
+      const updatedRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("ticket:claim")
+          .setLabel(`Claimed by ${interaction.user.displayName || interaction.user.username}`)
+          .setStyle(ButtonStyle.Success)
+          .setDisabled(true),
+        new ButtonBuilder()
+          .setCustomId("ticket:close")
+          .setLabel("Close Ticket")
+          .setStyle(ButtonStyle.Danger)
+      );
+      await originalMessage.edit({ components: [updatedRow] }).catch(() => {});
+    }
+
+    await interaction.reply(ephemeral("You claimed this ticket."));
     return;
   }
 

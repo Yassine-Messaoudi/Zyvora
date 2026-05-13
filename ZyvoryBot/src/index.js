@@ -3,13 +3,12 @@ import {
   Client,
   GatewayIntentBits,
   MessageFlags,
-  PermissionFlagsBits,
   REST,
-  Routes,
-  SlashCommandBuilder
+  Routes
 } from "discord.js";
 import { buildTicketPanelPayload } from "./ticketPanel.js";
 import { handleTicketButton, handleTicketModal, handleTicketSelect } from "./ticketHandler.js";
+import { slashCommands, handleSlashCommand } from "./commands.js";
 
 const requiredEnv = ["DISCORD_TOKEN", "CLIENT_ID"];
 const missing = requiredEnv.filter((key) => !process.env[key]);
@@ -18,13 +17,7 @@ if (missing.length) {
   throw new Error(`Missing required env values: ${missing.join(", ")}`);
 }
 
-const commands = [
-  new SlashCommandBuilder()
-    .setName("ticket-panel")
-    .setDescription("Post the Zyvory ticket panel in this channel.")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .toJSON()
-];
+const commands = slashCommands;
 
 const intents = [
   GatewayIntentBits.Guilds,
@@ -76,10 +69,9 @@ client.once("clientReady", async () => {
 
 client.on("interactionCreate", async (interaction) => {
   try {
-    if (interaction.isChatInputCommand() && interaction.commandName === "ticket-panel") {
-      await interaction.channel.send(buildTicketPanelPayload());
-      await interaction.reply({ content: "Zyvory ticket panel posted.", flags: MessageFlags.Ephemeral });
-      return;
+    if (interaction.isChatInputCommand()) {
+      const handled = await handleSlashCommand(interaction, { buildTicketPanelPayload });
+      if (handled) return;
     }
 
     if (interaction.isButton() && interaction.customId.startsWith("ticket:")) {
@@ -97,7 +89,7 @@ client.on("interactionCreate", async (interaction) => {
     }
   } catch (error) {
     console.error(error);
-    const payload = { content: "Something went wrong while handling that ticket action.", flags: MessageFlags.Ephemeral };
+    const payload = { content: "Something went wrong while handling that interaction.", flags: MessageFlags.Ephemeral };
     if (interaction.deferred || interaction.replied) {
       await interaction.followUp(payload).catch(() => {});
     } else {

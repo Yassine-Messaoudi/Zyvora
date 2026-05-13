@@ -2,14 +2,61 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Zyvory Market - Premium digital products marketplace with secure checkout and instant delivery." />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#02070D" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="robots" content="index,follow" />
+    <meta name="googlebot" content="index,follow" />
+    <meta name="description" content="Zyvora - Premium digital products, gaming accounts, license keys, and tools with instant crypto and PayPal delivery. Secure invoices, automatic delivery, and 24/7 support." />
+    <meta name="keywords" content="digital products, gaming accounts, license keys, crypto checkout, instant delivery, paypal, litecoin, bitcoin, ethereum, solana" />
+    <meta name="author" content="Zyvora" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Zyvora" />
+    <meta property="og:title" content="Zyvora — Premium Digital Marketplace" />
+    <meta property="og:description" content="Buy gaming accounts, keys, tools and digital products with instant crypto delivery." />
+    <meta property="og:image" content="/images/zyvola-logo.png" />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Zyvora — Premium Digital Marketplace" />
+    <meta name="twitter:description" content="Buy gaming accounts, keys, tools and digital products with instant crypto delivery." />
+    <meta name="twitter:image" content="/images/zyvola-logo.png" />
+
+    <!-- Icons / PWA -->
     <link rel="icon" type="image/png" href="/images/zyvola-logo.png" />
     <link rel="apple-touch-icon" href="/images/zyvola-logo.png" />
-    <title>Zyvory Market</title>
+    <link rel="mask-icon" href="/images/zyvola-logo.png" color="#02070D" />
+
+    <!-- Preconnect to commonly used origins -->
+    <link rel="preconnect" href="https://res.cloudinary.com" crossorigin />
+    <link rel="dns-prefetch" href="https://res.cloudinary.com" />
+
+    <title>Zyvora — Premium Digital Marketplace</title>
+
+    <!-- JSON-LD: Organization -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "Zyvora",
+        "url": "https://zyvora.com",
+        "logo": "/images/zyvola-logo.png",
+        "sameAs": ["https://discord.gg/PKWwqG8uYB"],
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "contactType": "customer support",
+          "url": "https://discord.gg/PKWwqG8uYB",
+          "availableLanguage": ["English"]
+        }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>You need to enable JavaScript to run this site.</noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
