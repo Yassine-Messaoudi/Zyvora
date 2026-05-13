@@ -3422,6 +3422,27 @@ function FaqSection() {
   );
 }
 
+// ── Reusable premium page hero shared across new pages ──
+function PageHero({ eyebrow, title, lede, icon: Icon, children }) {
+  return (
+    <section className="page-hero">
+      <div className="page-hero-bg" aria-hidden="true" />
+      <div className="page-hero-glow" aria-hidden="true" />
+      <div className="container-shell page-hero-inner">
+        {Icon && (
+          <motion.div initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }} className="page-hero-icon">
+            <Icon className="h-8 w-8" />
+          </motion.div>
+        )}
+        {eyebrow && <p className="page-hero-eyebrow">{eyebrow}</p>}
+        <motion.h1 initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }} className="page-hero-title">{title}</motion.h1>
+        {lede && <motion.p initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.05 }} className="page-hero-lede">{lede}</motion.p>}
+        {children && <div className="page-hero-children">{children}</div>}
+      </div>
+    </section>
+  );
+}
+
 function PolicyPage({ type }) {
   const isTerms = type === "terms";
   useDocumentTitle(isTerms ? "Terms of Service" : "Privacy Policy");

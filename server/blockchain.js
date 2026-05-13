@@ -279,6 +279,10 @@ export async function getIncomingTransactions(coin, address) {
 // because each invoice has a unique sub-satoshi offset baked into the amount.
 // We prefer an *exact* match first (within absolute precision), then accept
 // the closest tx whose amount is at least 99% of expected.
+// Find a tx that matches expectedAmount tightly (exact unique-offset or within 0.1%).
+// Caller is responsible for excluding already-claimed transactions.
+// Returns null if no tight match exists (the caller may then try the overpayment
+// pass via findOverpaymentMatch).
 export function findMatchingPayment(transactions, expectedAmount) {
   if (!transactions?.length || !expectedAmount) return null;
 
@@ -303,8 +307,34 @@ export function findMatchingPayment(transactions, expectedAmount) {
   }
   if (best) return best;
 
-  // Underpayment is NOT auto-accepted (would cause confusion / missing funds).
+  // No tight match — caller should try the overpayment pass.
   return null;
+}
+
+// Maximum overpayment we accept automatically (2.0 = up to double the expected amount).
+// Above this, the tx is not auto-matched and requires admin review to avoid
+// mis-attributing a wildly-different deposit.
+const MAX_OVERPAYMENT_MULTIPLIER = 2.0;
+
+// Find the closest overpayment tx for a single invoice.
+// A tx qualifies if its amount is between expectedAmount and expectedAmount * 2.
+// Returns the qualifying tx with the smallest positive delta (closest to expected).
+// Underpayment is NEVER auto-accepted.
+export function findOverpaymentMatch(transactions, expectedAmount) {
+  if (!transactions?.length || !expectedAmount) return null;
+  const maxAcceptable = expectedAmount * MAX_OVERPAYMENT_MULTIPLIER;
+  let best = null;
+  let bestDelta = Infinity;
+  for (const tx of transactions) {
+    if (tx.amount >= expectedAmount && tx.amount <= maxAcceptable) {
+      const delta = tx.amount - expectedAmount;
+      if (delta < bestDelta) {
+        best = tx;
+        bestDelta = delta;
+      }
+    }
+  }
+  return best;
 }
 
 export function getRequiredConfirmations(coin) {

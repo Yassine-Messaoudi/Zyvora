@@ -25,7 +25,7 @@ import {
   addActivityLog, addDeliveryLog, getAdminSummary, getRecentActivityLogs
 } from "./store.js";
 import { getWalletAddress, calculateCryptoAmount, createQrData, supportedCoins, getLivePrices, convertFiat } from "./payments.js";
-import { getIncomingTransactions, findMatchingPayment, getRequiredConfirmations } from "./blockchain.js";
+import { getIncomingTransactions, findMatchingPayment, findOverpaymentMatch, getRequiredConfirmations } from "./blockchain.js";
 import { sendDeliveryEmail, sendDiscordWebhook, sendVerificationEmail } from "./delivery.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -204,26 +204,55 @@ async function checkPendingPayments() {
       const txs = await getIncomingTransactions(coin, address);
       if (!txs.length) continue;
 
-      // Match each invoice independently against the list of incoming txs.
-      // Track which tx hashes have already been claimed to prevent the same
-      // deposit being assigned to two invoices.
+      // Two-pass matching:
+      //   Pass 1: tight match (exact unique-offset or within 0.1%) for every invoice.
+      //   Pass 2: overpayment match — for invoices not matched in pass 1, pick the
+      //           closest tx whose amount is >= expected (up to 2× cap).
+      // Each tx hash can only be claimed by one invoice (set tracked across passes).
       const claimedTxHashes = new Set(
         invoices.map((i) => i.transactionId).filter(Boolean)
       );
       const availableTxs = txs.filter((tx) => !claimedTxHashes.has(tx.txHash));
+      const required = getRequiredConfirmations(coin);
 
+      // ── Pass 1: tight matches ──
+      const matches = new Map(); // invoice.id -> { match, knownTx }
       for (const invoice of invoices) {
-        const required = getRequiredConfirmations(coin);
-        // If we already know which tx belongs to this invoice, just refresh its confirmation count
         const knownTx = invoice.transactionId && txs.find((t) => t.txHash === invoice.transactionId);
-        const match = knownTx || findMatchingPayment(availableTxs, invoice.expectedCryptoAmount);
-        if (!match) continue;
-
-        if (!knownTx) {
-          claimedTxHashes.add(match.txHash);
-          const idx = availableTxs.findIndex((t) => t.txHash === match.txHash);
+        if (knownTx) {
+          matches.set(invoice.id, { match: knownTx, knownTx: true });
+          continue;
+        }
+        const tight = findMatchingPayment(availableTxs, invoice.expectedCryptoAmount);
+        if (tight) {
+          matches.set(invoice.id, { match: tight, knownTx: false });
+          claimedTxHashes.add(tight.txHash);
+          const idx = availableTxs.findIndex((t) => t.txHash === tight.txHash);
           if (idx >= 0) availableTxs.splice(idx, 1);
         }
+      }
+
+      // ── Pass 2: overpayment matches for invoices still unmatched ──
+      // Sort unmatched invoices by expected amount descending so a single
+      // overpayment is assigned to the closest (largest-expected) invoice first.
+      const unmatched = invoices.filter((inv) => !matches.has(inv.id))
+        .sort((a, b) => (b.expectedCryptoAmount || 0) - (a.expectedCryptoAmount || 0));
+      for (const invoice of unmatched) {
+        const over = findOverpaymentMatch(availableTxs, invoice.expectedCryptoAmount);
+        if (!over) continue;
+        matches.set(invoice.id, { match: over, knownTx: false, overpayment: true });
+        claimedTxHashes.add(over.txHash);
+        const idx = availableTxs.findIndex((t) => t.txHash === over.txHash);
+        if (idx >= 0) availableTxs.splice(idx, 1);
+        const overPct = (((over.amount - invoice.expectedCryptoAmount) / invoice.expectedCryptoAmount) * 100).toFixed(2);
+        console.log(`[payments] + Invoice ${invoice.id} overpayment detected — paid ${over.amount} vs expected ${invoice.expectedCryptoAmount} (+${overPct}%)`);
+      }
+
+      // ── Apply matches: update invoices & complete on enough confirmations ──
+      for (const invoice of invoices) {
+        const entry = matches.get(invoice.id);
+        if (!entry) continue;
+        const { match, knownTx, overpayment } = entry;
 
         await updateInvoice(invoice.id, {
           transactionId: match.txHash,
@@ -236,13 +265,13 @@ async function checkPendingPayments() {
             transactionId: match.txHash,
             confirmationCount: match.confirmations
           });
-          await addInvoiceEvent(invoice.id, "payment_confirmed");
+          await addInvoiceEvent(invoice.id, overpayment ? "payment_confirmed_overpaid" : "payment_confirmed");
           const confirmed = await getInvoiceById(invoice.id);
           await completeInvoice(confirmed);
-          console.log(`[payments] ✓ Invoice ${invoice.id} confirmed — TX: ${match.txHash.slice(0, 16)}... (${match.confirmations} confs)`);
+          console.log(`[payments] ✓ Invoice ${invoice.id} confirmed — TX: ${match.txHash.slice(0, 16)}... (${match.confirmations} confs)${overpayment ? " [overpaid]" : ""}`);
         } else if (!knownTx) {
-          await addInvoiceEvent(invoice.id, "payment_detected");
-          console.log(`[payments] ◎ Invoice ${invoice.id} detected — ${match.confirmations}/${required} confirmations`);
+          await addInvoiceEvent(invoice.id, overpayment ? "payment_detected_overpaid" : "payment_detected");
+          console.log(`[payments] ◎ Invoice ${invoice.id} detected — ${match.confirmations}/${required} confirmations${overpayment ? " [overpaid]" : ""}`);
         } else if (match.confirmations !== invoice.confirmationCount) {
           console.log(`[payments] · Invoice ${invoice.id} confirmation update — ${match.confirmations}/${required}`);
         }
