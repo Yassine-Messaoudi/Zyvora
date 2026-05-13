@@ -25,7 +25,7 @@ import {
   addActivityLog, addDeliveryLog, getAdminSummary, getRecentActivityLogs
 } from "./store.js";
 import { getWalletAddress, calculateCryptoAmount, createQrData, supportedCoins, getLivePrices, convertFiat } from "./payments.js";
-import { getIncomingTransactions, findMatchingPayment, findOverpaymentMatch, getRequiredConfirmations } from "./blockchain.js";
+import { getIncomingTransactions, findMatchingPayment, findOverpaymentMatch, findFeeDeductedMatch, getRequiredConfirmations } from "./blockchain.js";
 import { sendDeliveryEmail, sendDiscordWebhook, sendVerificationEmail } from "./delivery.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -248,11 +248,39 @@ async function checkPendingPayments() {
         console.log(`[payments] + Invoice ${invoice.id} overpayment detected — paid ${over.amount} vs expected ${invoice.expectedCryptoAmount} (+${overPct}%)`);
       }
 
+      // ── Pass 3: fee-deducted matches (Binance/Kraken/Coinbase quirk) ──
+      // For invoices still unmatched, accept a tx whose amount is below expected
+      // by an amount consistent with a typical exchange network-fee deduction.
+      // Capped per-coin so we can never false-match an unrelated tx.
+      const stillUnmatched = invoices.filter((inv) => !matches.has(inv.id))
+        .sort((a, b) => (b.expectedCryptoAmount || 0) - (a.expectedCryptoAmount || 0));
+      for (const invoice of stillUnmatched) {
+        const fee = findFeeDeductedMatch(availableTxs, invoice.expectedCryptoAmount, coin);
+        if (!fee) continue;
+        matches.set(invoice.id, { match: fee, knownTx: false, feeDeducted: true });
+        claimedTxHashes.add(fee.txHash);
+        const idx = availableTxs.findIndex((t) => t.txHash === fee.txHash);
+        if (idx >= 0) availableTxs.splice(idx, 1);
+        const short = (invoice.expectedCryptoAmount - fee.amount).toFixed(8);
+        console.log(`[payments] - Invoice ${invoice.id} fee-deducted match — paid ${fee.amount} vs expected ${invoice.expectedCryptoAmount} (−${short} ${coin}, likely exchange network fee)`);
+      }
+
       // ── Apply matches: update invoices & complete on enough confirmations ──
       for (const invoice of invoices) {
         const entry = matches.get(invoice.id);
         if (!entry) continue;
-        const { match, knownTx, overpayment } = entry;
+        const { match, knownTx, overpayment, feeDeducted } = entry;
+        const matchTag = overpayment ? "overpaid" : feeDeducted ? "fee-deducted" : null;
+        const confirmedEvent = overpayment
+          ? "payment_confirmed_overpaid"
+          : feeDeducted
+            ? "payment_confirmed_fee_deducted"
+            : "payment_confirmed";
+        const detectedEvent = overpayment
+          ? "payment_detected_overpaid"
+          : feeDeducted
+            ? "payment_detected_fee_deducted"
+            : "payment_detected";
 
         await updateInvoice(invoice.id, {
           transactionId: match.txHash,
@@ -265,13 +293,13 @@ async function checkPendingPayments() {
             transactionId: match.txHash,
             confirmationCount: match.confirmations
           });
-          await addInvoiceEvent(invoice.id, overpayment ? "payment_confirmed_overpaid" : "payment_confirmed");
+          await addInvoiceEvent(invoice.id, confirmedEvent);
           const confirmed = await getInvoiceById(invoice.id);
           await completeInvoice(confirmed);
-          console.log(`[payments] ✓ Invoice ${invoice.id} confirmed — TX: ${match.txHash.slice(0, 16)}... (${match.confirmations} confs)${overpayment ? " [overpaid]" : ""}`);
+          console.log(`[payments] ✓ Invoice ${invoice.id} confirmed — TX: ${match.txHash.slice(0, 16)}... (${match.confirmations} confs)${matchTag ? ` [${matchTag}]` : ""}`);
         } else if (!knownTx) {
-          await addInvoiceEvent(invoice.id, overpayment ? "payment_detected_overpaid" : "payment_detected");
-          console.log(`[payments] ◎ Invoice ${invoice.id} detected — ${match.confirmations}/${required} confirmations${overpayment ? " [overpaid]" : ""}`);
+          await addInvoiceEvent(invoice.id, detectedEvent);
+          console.log(`[payments] ◎ Invoice ${invoice.id} detected — ${match.confirmations}/${required} confirmations${matchTag ? ` [${matchTag}]` : ""}`);
         } else if (match.confirmations !== invoice.confirmationCount) {
           console.log(`[payments] · Invoice ${invoice.id} confirmation update — ${match.confirmations}/${required}`);
         }
@@ -745,6 +773,121 @@ app.post("/api/admin/invoices/:id/mark-paid", auth, async (req, res) => {
   const fresh = await getInvoiceById(invoice.id);
   await completeInvoice(fresh);
   res.json(fresh);
+});
+
+// ── Debug: list raw incoming txs at any wallet address ──
+// Use this to verify what actually arrived on-chain vs what an invoice expected.
+// If a customer claims they paid but the invoice is stuck, hit this endpoint
+// with the same coin+address shown on the invoice. If you see NO transactions,
+// the payment either hasn't broadcast yet or went to a different address.
+// Query: ?coin=LTC[&address=Lxxx]   (address optional — defaults to configured wallet)
+app.get("/api/admin/wallet-activity", auth, async (req, res) => {
+  try {
+    const coin = String(req.query.coin || "").toUpperCase();
+    if (!["BTC", "LTC", "ETH", "SOL"].includes(coin)) {
+      return res.status(400).json({ error: "coin must be BTC, LTC, ETH or SOL" });
+    }
+    let address = req.query.address ? String(req.query.address) : null;
+    if (!address) {
+      const settings = await getSettings();
+      try { address = getWalletAddress(settings, coin); }
+      catch (err) { return res.status(400).json({ error: err.message }); }
+    }
+
+    const txs = await getIncomingTransactions(coin, address);
+    const pending = (await getPendingInvoices()).filter((i) => i.selectedCoin === coin && i.depositAddress === address);
+
+    const annotated = txs.map((tx) => {
+      const matches = [];
+      for (const inv of pending) {
+        const diff = tx.amount - inv.expectedCryptoAmount;
+        const pct = inv.expectedCryptoAmount ? (diff / inv.expectedCryptoAmount) * 100 : 0;
+        let kind = null;
+        if (Math.abs(diff) <= 1e-8) kind = "exact";
+        else if (Math.abs(diff) <= inv.expectedCryptoAmount * 0.001) kind = "tight";
+        else if (tx.amount >= inv.expectedCryptoAmount && tx.amount <= inv.expectedCryptoAmount * 2) kind = "overpayment";
+        else if (tx.amount < inv.expectedCryptoAmount) kind = "underpayment";
+        else kind = "above-cap";
+        matches.push({
+          invoiceId: inv.id,
+          expectedAmount: inv.expectedCryptoAmount,
+          deltaPct: Number(pct.toFixed(3)),
+          matchKind: kind,
+          alreadyClaimedBy: inv.transactionId === tx.txHash ? inv.id : null
+        });
+      }
+      // Sort matches: best (lowest |deltaPct|) first
+      matches.sort((a, b) => Math.abs(a.deltaPct) - Math.abs(b.deltaPct));
+      return { txHash: tx.txHash, amount: tx.amount, confirmations: tx.confirmations, possibleMatches: matches };
+    });
+
+    res.json({
+      coin,
+      address,
+      walletConfigured: true,
+      pendingInvoiceCount: pending.length,
+      pendingInvoices: pending.map((i) => ({ id: i.id, expectedAmount: i.expectedCryptoAmount, totalUsd: i.totalUsd, createdAt: i.createdAt, expiresAt: i.expiresAt })),
+      txCount: txs.length,
+      txs: annotated
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Debug: force a fresh on-chain recheck for a single invoice ──
+// Returns the matching attempt result so you can see exactly why an invoice
+// is or isn't matching the current on-chain state.
+app.post("/api/admin/invoices/:id/recheck", auth, async (req, res) => {
+  try {
+    const invoice = await getInvoiceById(req.params.id);
+    if (!invoice) return res.status(404).json({ error: "Invoice not found" });
+    if (!invoice.depositAddress || !invoice.selectedCoin) {
+      return res.status(400).json({ error: "Invoice has no deposit address / coin (likely non-crypto)" });
+    }
+
+    const txs = await getIncomingTransactions(invoice.selectedCoin, invoice.depositAddress);
+    const required = getRequiredConfirmations(invoice.selectedCoin);
+    const tight = findMatchingPayment(txs, invoice.expectedCryptoAmount);
+    const over = !tight ? findOverpaymentMatch(txs, invoice.expectedCryptoAmount) : null;
+    const fee = !tight && !over ? findFeeDeductedMatch(txs, invoice.expectedCryptoAmount, invoice.selectedCoin) : null;
+    const match = tight || over || fee;
+    const matchKind = tight ? "tight" : over ? "overpayment" : fee ? "fee-deducted" : null;
+    const confirmedEvent = tight ? "payment_confirmed" : over ? "payment_confirmed_overpaid" : "payment_confirmed_fee_deducted";
+
+    const result = {
+      invoiceId: invoice.id,
+      coin: invoice.selectedCoin,
+      address: invoice.depositAddress,
+      expectedAmount: invoice.expectedCryptoAmount,
+      requiredConfirmations: required,
+      txsAtAddress: txs.length,
+      txs: txs.map((t) => ({ txHash: t.txHash, amount: t.amount, confirmations: t.confirmations })),
+      matchFound: !!match,
+      matchKind,
+      match: match ? { txHash: match.txHash, amount: match.amount, confirmations: match.confirmations } : null
+    };
+
+    if (match && match.confirmations >= required && invoice.status !== "paid") {
+      await updateInvoice(invoice.id, { status: "paid", transactionId: match.txHash, confirmationCount: match.confirmations });
+      await addInvoiceEvent(invoice.id, confirmedEvent);
+      const confirmed = await getInvoiceById(invoice.id);
+      await completeInvoice(confirmed);
+      result.action = "marked_paid_and_delivered";
+    } else if (match) {
+      await updateInvoice(invoice.id, { transactionId: match.txHash, confirmationCount: match.confirmations });
+      result.action = "tx_linked_awaiting_confirmations";
+    } else {
+      result.action = "no_match";
+      result.hint = txs.length === 0
+        ? "No incoming transactions at this address. The payment either hasn't broadcast yet, or went to a DIFFERENT address than the one on this invoice."
+        : "Transactions exist but none match the expected amount. The amount may be above the 2× overpayment cap, or the underpayment is larger than the per-coin fee tolerance. Use Mark Paid if you've verified the deposit manually.";
+    }
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get("/api/admin/orders", auth, async (_req, res) => {

@@ -1558,6 +1558,36 @@ function InvoicePage({ invoiceId }) {
               </button>
             </div>
           </div>
+          {(() => {
+            const EXCHANGE_FEES = { BTC: 0.0001, LTC: 0.0001, ETH: 0.001, SOL: 0.000005 };
+            const fee = EXCHANGE_FEES[invoice.selectedCoin];
+            if (!fee || !invoice.expectedCryptoAmount) return null;
+            const exchangeSafe = (Number(invoice.expectedCryptoAmount) + fee).toFixed(8).replace(/0+$/, "").replace(/\.$/, "");
+            return (
+              <div className="inv-exchange-note">
+                <div className="inv-exchange-note-header">
+                  <AlertTriangle className="h-4 w-4" />
+                  <span>Paying from Binance, Kraken or Coinbase?</span>
+                </div>
+                <p className="inv-exchange-note-text">
+                  These exchanges deduct the network fee <strong>from the amount you send</strong>,
+                  so the address receives less than expected. Enter this amount on the exchange
+                  instead, so we receive the full expected amount:
+                </p>
+                <div className="inv-exact-row" style={{marginTop:".5rem"}}>
+                  <span className="inv-exact-value" style={{color:"#fbbf24"}}>{exchangeSafe} {invoice.selectedCoin}</span>
+                  <button className="inv-copy-btn" onClick={() => copyText(exchangeSafe, "exchAmt")} title="Copy exchange-safe amount">
+                    {copied === "exchAmt" ? <CheckCircle2 className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
+                  </button>
+                </div>
+                <p className="inv-exchange-note-text" style={{marginTop:".4rem",fontSize:".7rem",opacity:.75}}>
+                  Includes a ~{fee} {invoice.selectedCoin} network-fee buffer.
+                  If you pay from a self-custody wallet (Electrum, Trust, Exodus, MetaMask, Phantom),
+                  send the original exact amount above instead.
+                </p>
+              </div>
+            );
+          })()}
           <div className="inv-how-to-pay">
             <p className="inv-how-label">HOW TO PAY</p>
             <div className="inv-step"><span className="inv-step-num">1</span><span>Send {invoice.expectedCryptoAmount} {invoice.selectedCoin} to the address above</span></div>
@@ -2819,6 +2849,8 @@ function AdminInvoices({ data, headers, onChange }) {
   const [search, setSearch] = useState("");
   const byStatus = filter === "all" ? source : source.filter((inv) => inv.status === filter);
   const filtered = search ? byStatus.filter(inv => (inv.id + (inv.customerEmail || "")).toLowerCase().includes(search.toLowerCase())) : byStatus;
+  const [recheckResult, setRecheckResult] = useState(null);
+  const [recheckBusy, setRecheckBusy] = useState(null);
   const markPaid = async (id) => {
     try {
       await api(`/admin/invoices/${id}/mark-paid`, { method: "POST", body: "{}", headers });
@@ -2826,6 +2858,24 @@ function AdminInvoices({ data, headers, onChange }) {
       setViewInv(null);
       onChange();
     } catch (err) { setMessage(err.message); }
+  };
+  const recheck = async (id) => {
+    setRecheckBusy(id);
+    setRecheckResult(null);
+    try {
+      const r = await api(`/admin/invoices/${id}/recheck`, { method: "POST", body: "{}", headers });
+      setRecheckResult(r);
+      if (r.action === "marked_paid_and_delivered") {
+        setMessage(`Invoice ${id} matched on-chain and delivered!`);
+        onChange();
+      } else if (r.action === "tx_linked_awaiting_confirmations") {
+        setMessage(`Tx linked — awaiting ${r.requiredConfirmations} confirmations (currently ${r.match?.confirmations || 0}).`);
+        onChange();
+      } else {
+        setMessage(`No match. ${r.hint || ""}`);
+      }
+    } catch (err) { setMessage(err.message); }
+    finally { setRecheckBusy(null); }
   };
   const counts = ["pending", "detected", "confirming", "paid", "expired", "underpaid"].map((s) => [s, source.filter((inv) => inv.status === s).length]);
   return (
@@ -2871,7 +2921,36 @@ function AdminInvoices({ data, headers, onChange }) {
                 </div>
               )}
             </div>
+            {recheckResult && recheckResult.invoiceId === viewInv.id && (
+              <div style={{margin:"0 1.25rem .8rem", padding:".75rem .85rem", border:"1px solid rgba(99,102,241,0.2)", borderRadius:"10px", background:"rgba(11,18,32,0.6)", fontSize:".78rem"}}>
+                <strong style={{color:"#a5b4fc", display:"block", marginBottom:".4rem"}}>On-chain recheck</strong>
+                <div style={{color:"#9CB6C9", lineHeight:1.55}}>
+                  <div><span style={{color:"#6b7280"}}>Txs at address:</span> <strong style={{color:"#fff"}}>{recheckResult.txsAtAddress}</strong></div>
+                  <div><span style={{color:"#6b7280"}}>Match:</span> <strong style={{color: recheckResult.matchFound ? "#4ade80" : "#f59e0b"}}>{recheckResult.matchFound ? `${recheckResult.matchKind} (${recheckResult.match.amount} / ${recheckResult.match.confirmations} confs)` : "none"}</strong></div>
+                  <div><span style={{color:"#6b7280"}}>Action:</span> <strong style={{color:"#fff"}}>{recheckResult.action}</strong></div>
+                  {recheckResult.hint && <div style={{marginTop:".35rem", color:"#fbbf24", fontSize:".75rem"}}>{recheckResult.hint}</div>}
+                  {recheckResult.txs && recheckResult.txs.length > 0 && (
+                    <details style={{marginTop:".5rem"}}>
+                      <summary style={{cursor:"pointer", color:"#7dd3fc", fontWeight:600}}>{recheckResult.txs.length} txs found at this address — show all</summary>
+                      <div style={{marginTop:".4rem", display:"grid", gap:".3rem"}}>
+                        {recheckResult.txs.map((t) => (
+                          <div key={t.txHash} style={{fontFamily:"monospace", fontSize:".72rem", color:"#9CB6C9", padding:".35rem .5rem", background:"rgba(2,7,17,0.6)", borderRadius:"6px"}}>
+                            <div>{t.amount} (confs: {t.confirmations})</div>
+                            <div style={{wordBreak:"break-all", color:"#6d7d99"}}>{t.txHash}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="admin-modal-footer">
+              {viewInv.status !== "paid" && (
+                <button className="small-btn" onClick={() => recheck(viewInv.id)} disabled={recheckBusy === viewInv.id}>
+                  {recheckBusy === viewInv.id ? "Checking..." : "Recheck on-chain"}
+                </button>
+              )}
               {viewInv.status !== "paid" && <button className="primary-btn" onClick={() => markPaid(viewInv.id)}>Mark Paid</button>}
               <button className="small-btn" onClick={() => setViewInv(null)}>Close</button>
             </div>

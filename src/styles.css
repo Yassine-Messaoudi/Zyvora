@@ -487,6 +487,10 @@ img{max-width:100%}
 .inv-exact-label{font-size:.72rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#64748b;margin-bottom:.6rem}
 .inv-exact-row{display:flex;align-items:center;justify-content:flex-end;gap:.5rem;background:rgba(3,7,17,0.5);border:1px solid var(--line);border-radius:10px;padding:.7rem 1rem}
 .inv-exact-value{font-family:monospace;font-size:.92rem;font-weight:700;color:var(--accent-hover)}
+.inv-exchange-note{margin-top:1rem;padding:.85rem 1rem;border:1px solid rgba(251,191,36,0.28);border-radius:12px;background:linear-gradient(135deg,rgba(251,191,36,0.08),rgba(245,158,11,0.04));box-shadow:0 0 0 1px rgba(251,191,36,0.04) inset}
+.inv-exchange-note-header{display:flex;align-items:center;gap:.5rem;font-size:.82rem;font-weight:800;color:#fbbf24;margin-bottom:.45rem;letter-spacing:.01em}
+.inv-exchange-note-text{margin:0;font-size:.78rem;line-height:1.55;color:#cbd5e1}
+.inv-exchange-note-text strong{color:#fff}
 .inv-how-to-pay{margin-top:1.5rem;padding-top:1.2rem;border-top:1px solid var(--line)}
 .inv-how-label{font-size:.72rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#64748b;margin-bottom:.8rem}
 .inv-step{display:flex;align-items:flex-start;gap:.75rem;padding:.55rem 0;font-size:.85rem;color:#94a3b8;line-height:1.5}

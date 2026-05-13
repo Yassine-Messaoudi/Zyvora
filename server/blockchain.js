@@ -337,6 +337,42 @@ export function findOverpaymentMatch(transactions, expectedAmount) {
   return best;
 }
 
+// Per-coin ceiling on what we treat as an "exchange-deducted network fee" underpayment.
+// Binance/Kraken/Coinbase deduct the network fee from the user's "amount" field on
+// withdrawal, so the recipient sees expectedAmount − networkFee. These ceilings are
+// chosen well above realistic network fees (≈3–5×) so we still catch them after fee
+// spikes, but well below typical invoice-to-invoice spacing so we can't false-match
+// another invoice's tx. They also act as an absolute cap on how much underpayment
+// is forgiven: never more than this, regardless of expected amount.
+const MAX_FEE_UNDERPAYMENT = {
+  BTC: 0.001,    // typical BTC fee 0.0001–0.0005
+  LTC: 0.0005,   // Binance LTC fee 0.0001
+  ETH: 0.003,    // varies wildly with gas; ceiling ≈ $7 worst-case
+  SOL: 0.01      // SOL fees are tiny; ceiling generous
+};
+
+// Find a tx whose amount is below expected by an amount consistent with a typical
+// exchange-deducted network fee. Returns the closest-matching tx (smallest shortfall)
+// so we still prefer txs closer to expected.
+//   shortfall = expectedAmount − tx.amount
+//   accept if 0 < shortfall <= MAX_FEE_UNDERPAYMENT[coin]
+// Underpayments larger than the per-coin cap remain unmatched and require admin review.
+export function findFeeDeductedMatch(transactions, expectedAmount, coin) {
+  if (!transactions?.length || !expectedAmount) return null;
+  const cap = MAX_FEE_UNDERPAYMENT[coin] || 0;
+  if (cap <= 0) return null;
+  let best = null;
+  let bestShortfall = Infinity;
+  for (const tx of transactions) {
+    const shortfall = expectedAmount - tx.amount;
+    if (shortfall > 0 && shortfall <= cap && shortfall < bestShortfall) {
+      best = tx;
+      bestShortfall = shortfall;
+    }
+  }
+  return best;
+}
+
 export function getRequiredConfirmations(coin) {
   return REQUIRED_CONFIRMATIONS[coin] || 2;
 }
