@@ -879,21 +879,23 @@ function ProductsPage() {
     grouped[cat].push(p);
   });
 
-  const catData = categories.map((c) => {
-    const name = c.name || c;
-    const items = grouped[name] || [];
-    const prices = items.map((p) => Number(p.price));
-    const totalStock = items.reduce((sum, p) => sum + (p.stockCount || 0), 0);
-    return {
-      ...c,
-      name,
-      image: c.image || null,
-      items,
-      minPrice: prices.length ? Math.min(...prices) : 0,
-      maxPrice: prices.length ? Math.max(...prices) : 0,
-      totalStock,
-    };
-  });
+  const catData = categories
+    .map((c) => {
+      const name = c.name || c;
+      const items = grouped[name] || [];
+      const prices = items.map((p) => Number(p.price));
+      const totalStock = items.reduce((sum, p) => sum + (p.stockCount || 0), 0);
+      return {
+        ...c,
+        name,
+        image: c.image || null,
+        items,
+        minPrice: prices.length ? Math.min(...prices) : 0,
+        maxPrice: prices.length ? Math.max(...prices) : 0,
+        totalStock,
+      };
+    })
+    .filter((c) => c.items.length > 0);
 
   const filteredCats = activePill
     ? catData.filter((c) => c.tag === activePill || c.name === activePill)

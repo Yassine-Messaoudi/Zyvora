@@ -39,6 +39,12 @@ function toMySQLDatetime(date) {
   return date.toISOString().slice(0, 19).replace("T", " ");
 }
 
+function publicImageUrl(kind, id, image) {
+  if (!image) return null;
+  if (String(image).startsWith("data:")) return `/api/img/${kind}/${id}`;
+  return image;
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024, fieldSize: 10 * 1024 * 1024 },
@@ -56,6 +62,12 @@ app.set("trust proxy", 1);
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: process.env.CLIENT_ORIGIN || "*" }));
 app.use(express.json({ limit: "10mb" }));
+app.use("/api", (_req, res, next) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.set("Pragma", "no-cache");
+  res.set("Expires", "0");
+  next();
+});
 // images are stored as base64 data URLs in the database, no static uploads dir needed
 
 const checkoutLimiter = rateLimit({ windowMs: 60_000, limit: 12 });
@@ -386,6 +398,7 @@ app.get("/api/prices", async (_req, res) => {
 app.get("/api/img/category/:id", async (req, res) => {
   const cat = await getCategoryById(Number(req.params.id));
   if (!cat || !cat.image) return res.status(404).end();
+  if (!cat.image.startsWith("data:")) return res.redirect(cat.image);
   const match = cat.image.match(/^data:([^;]+);base64,(.+)$/);
   if (!match) return res.status(404).end();
   const buffer = Buffer.from(match[2], "base64");
@@ -397,6 +410,7 @@ app.get("/api/img/category/:id", async (req, res) => {
 app.get("/api/img/product/:id", async (req, res) => {
   const product = await getProductById(req.params.id);
   if (!product || !product.image) return res.status(404).end();
+  if (!product.image.startsWith("data:")) return res.redirect(product.image);
   const match = product.image.match(/^data:([^;]+);base64,(.+)$/);
   if (!match) return res.status(404).end();
   const buffer = Buffer.from(match[2], "base64");
@@ -407,7 +421,7 @@ app.get("/api/img/product/:id", async (req, res) => {
 
 app.get("/api/categories", async (_req, res) => {
   const cats = await getAllCategories();
-  res.json(cats.map(c => ({ ...c, image: c.image ? `/api/img/category/${c.id}` : null })));
+  res.json(cats.map(c => ({ ...c, image: publicImageUrl("category", c.id, c.image) })));
 });
 
 app.get("/api/products", async (req, res) => {
@@ -419,7 +433,7 @@ app.get("/api/products", async (req, res) => {
     .map(publicProductListItem)
     .map(p => ({
       ...p,
-      image: p.image ? `/api/img/product/${p.id}` : null
+      image: publicImageUrl("product", p.id, p.image)
     }));
   if (search) products = products.filter((p) => p.name.toLowerCase().includes(search));
   if (category) products = products.filter((p) => p.category === category);
@@ -435,7 +449,7 @@ app.get("/api/products/:slug", async (req, res) => {
   if (!product) return res.status(404).json({ error: "Product not found" });
   const reviews = await getReviewsByProduct(product.id);
   const pub = publicProduct(product);
-  return res.json({ ...pub, image: pub.image ? `/api/img/product/${pub.id}` : null, reviews });
+  return res.json({ ...pub, image: publicImageUrl("product", pub.id, pub.image), reviews });
 });
 
 app.get("/api/reviews", async (_req, res) => {
@@ -749,18 +763,18 @@ app.get("/api/admin/summary", auth, async (_req, res) => {
 });
 
 app.get("/api/admin/products", auth, async (_req, res) => {
-  const products = (await getAllProducts()).map(p => ({ ...p, image: p.image ? `/api/img/product/${p.id}` : null }));
+  const products = (await getAllProducts()).map(p => ({ ...p, image: publicImageUrl("product", p.id, p.image) }));
   res.json(products);
 });
 
 app.get("/api/admin/catalog", auth, async (_req, res) => {
-  const categories = (await getAllCategories()).map(c => ({ ...c, image: c.image ? `/api/img/category/${c.id}` : null }));
-  const products = (await getAllProducts()).map(p => ({ ...p, image: p.image ? `/api/img/product/${p.id}` : null }));
+  const categories = (await getAllCategories()).map(c => ({ ...c, image: publicImageUrl("category", c.id, c.image) }));
+  const products = (await getAllProducts()).map(p => ({ ...p, image: publicImageUrl("product", p.id, p.image) }));
   res.json({ categories, products });
 });
 
 app.get("/api/admin/categories", auth, async (_req, res) => {
-  const cats = (await getAllCategories()).map(c => ({ ...c, image: c.image ? `/api/img/category/${c.id}` : null }));
+  const cats = (await getAllCategories()).map(c => ({ ...c, image: publicImageUrl("category", c.id, c.image) }));
   res.json(cats);
 });
 

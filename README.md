@@ -16,6 +16,26 @@ API: http://127.0.0.1:8787
 
 Copy `.env.example` to `.env` before production-style testing.
 
+## Product Import Tools
+
+To pull a reviewable catalog from Lusive product pages, run:
+
+```bash
+npm run scrape:lusive
+```
+
+This writes `imports/lusive-products.json` with catalog facts, product fields, source references, and no copied images. After reviewing the JSON, you can import the products into MySQL:
+
+```bash
+npm run import:lusive
+```
+
+For production, commit `imports/lusive-products.json` and `public/images/imported/lusive/`, then run this against the production database:
+
+```bash
+npm run seed:products
+```
+
 ## Demo Admin
 
 Default local credentials:

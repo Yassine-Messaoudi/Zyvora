@@ -11,6 +11,9 @@
     "build": "vite build",
     "start": "node server/index.js",
     "preview": "vite preview --host 127.0.0.1 --port 4173",
+    "scrape:lusive": "node scripts/scrape-lusive-products.js",
+    "import:lusive": "node scripts/scrape-lusive-products.js --apply",
+    "seed:products": "node scripts/seed-imported-products.js",
     "test": "node --test server/payments.test.js"
   },
   "keywords": [],
