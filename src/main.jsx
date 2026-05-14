@@ -185,7 +185,11 @@ async function api(path, options = {}) {
   const response = await fetch(`${API}${path}`, { ...options, headers });
   const text = await response.text();
   const data = text ? JSON.parse(text) : null;
-  if (!response.ok) throw new Error(data?.error || "Request failed");
+  if (!response.ok) {
+    const error = new Error(data?.error || "Request failed");
+    error.status = response.status;
+    throw error;
+  }
   return data;
 }
 
@@ -2275,7 +2279,19 @@ function AdminPage({ section }) {
                   : section === "settings"
                     ? "/admin/settings"
                     : "/admin/summary";
-    api(path, { headers }).then(setData).catch((err) => setError(err.message));
+    api(path, { headers }).then((payload) => {
+      setError("");
+      setData(payload);
+    }).catch((err) => {
+      if (err.status === 401) {
+        localStorage.removeItem(ADMIN_TOKEN_KEY);
+        setToken("");
+        setData(null);
+        setError("Session expired. Please sign in again.");
+        return;
+      }
+      setError(err.message);
+    });
   }, [section, token, reloadKey]);
   if (!token) {
     return (
@@ -2288,11 +2304,11 @@ function AdminPage({ section }) {
           <form className="mt-6 grid gap-4" onSubmit={signIn}>
             <label className="field">
               <span>Email</span>
-              <input value={login.email} onChange={(event) => setLogin({ ...login, email: event.target.value })} />
+              <input type="email" autoComplete="username" value={login.email} onChange={(event) => setLogin({ ...login, email: event.target.value })} />
             </label>
             <label className="field">
               <span>Password</span>
-              <input type="password" value={login.password} onChange={(event) => setLogin({ ...login, password: event.target.value })} />
+              <input type="password" autoComplete="current-password" value={login.password} onChange={(event) => setLogin({ ...login, password: event.target.value })} />
             </label>
             {error && <div className="error-box">{error}</div>}
             <button className="primary-btn justify-center">Login</button>
@@ -3148,9 +3164,9 @@ function AdminSettings({ data, headers, onChange }) {
 }
 
 function AdminProducts({ data, headers, onChange }) {
-  const rawCategories = data.categories || [];
+  const rawCategories = Array.isArray(data?.categories) ? data.categories : [];
   const catNames = rawCategories.map((c) => c.name || c);
-  const products = data.products || [];
+  const products = Array.isArray(data?.products) ? data.products : [];
   const [editingId, setEditingId] = useState("");
   const [form, setForm] = useState({ ...defaultProductForm, category: catNames[0] || "" });
   const [imageFile, setImageFile] = useState(null);
@@ -3407,8 +3423,8 @@ function AdminProducts({ data, headers, onChange }) {
 }
 
 function AdminCategories({ data, headers, onChange }) {
-  const categories = data.categories || [];
-  const products = data.products || [];
+  const categories = Array.isArray(data?.categories) ? data.categories : [];
+  const products = Array.isArray(data?.products) ? data.products : [];
   const [name, setName] = useState("");
   const [tag, setTag] = useState("");
   const [editingId, setEditingId] = useState(null);
