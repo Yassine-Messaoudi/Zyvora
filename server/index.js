@@ -10,6 +10,7 @@ import { randomUUID, randomBytes } from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
+import { execFile } from "node:child_process";
 import multer from "multer";
 import { initDatabase, getSettings, updateSettings } from "./db.js";
 import {
@@ -29,6 +30,7 @@ import { getIncomingTransactions, findMatchingPayment, findOverpaymentMatch, fin
 import { sendDeliveryEmail, sendDiscordWebhook, sendVerificationEmail } from "./delivery.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const rootDir = path.join(__dirname, "..");
 
 function fileToDataUrl(file) {
   const mime = file.mimetype || "image/png";
@@ -43,6 +45,31 @@ function publicImageUrl(kind, id, image) {
   if (!image) return null;
   if (String(image).startsWith("data:")) return `/api/img/${kind}/${id}`;
   return image;
+}
+
+function runNodeScript(scriptName, args = []) {
+  return new Promise((resolve, reject) => {
+    const child = execFile(
+      process.execPath,
+      [path.join(rootDir, "scripts", scriptName), ...args],
+      {
+        cwd: rootDir,
+        env: process.env,
+        timeout: 10 * 60 * 1000,
+        maxBuffer: 1024 * 1024 * 20
+      },
+      (error, stdout, stderr) => {
+        if (error) {
+          error.stdout = stdout;
+          error.stderr = stderr;
+          reject(error);
+          return;
+        }
+        resolve({ stdout, stderr });
+      }
+    );
+    child.stdin?.end();
+  });
 }
 
 const upload = multer({
@@ -875,6 +902,27 @@ app.delete("/api/admin/products/:id", auth, async (req, res) => {
   res.status(204).end();
 });
 
+app.post("/api/admin/products/import", auth, adminLimiter, async (req, res) => {
+  try {
+    const mode = String(req.body.mode || "seed");
+    if (!["seed", "scrape"].includes(mode)) return res.status(400).json({ error: "Invalid import mode" });
+
+    const startedAt = Date.now();
+    const result = mode === "scrape"
+      ? await runNodeScript("scrape-lusive-products.js", ["--apply"])
+      : await runNodeScript("seed-imported-products.js");
+
+    const output = `${result.stdout || ""}\n${result.stderr || ""}`.trim();
+    res.json({ ok: true, mode, elapsedMs: Date.now() - startedAt, output });
+  } catch (error) {
+    res.status(500).json({
+      error: "Product import failed",
+      details: error.message,
+      output: `${error.stdout || ""}\n${error.stderr || ""}`.trim()
+    });
+  }
+});
+
 app.post("/api/admin/upload", auth, upload.single("image"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
   res.json({ url: fileToDataUrl(req.file) });
@@ -1190,7 +1238,12 @@ app.delete("/api/admin/reviews/:id", auth, async (req, res) => {
 });
 
 // ── Serve frontend in production ──
-const distPath = path.join(__dirname, "..", "dist");
+const publicPath = path.join(rootDir, "public");
+if (fs.existsSync(publicPath)) {
+  app.use(express.static(publicPath));
+}
+
+const distPath = path.join(rootDir, "dist");
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
   app.get("/{*path}", (_req, res) => {

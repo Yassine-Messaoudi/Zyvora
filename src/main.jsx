@@ -3160,6 +3160,7 @@ function AdminProducts({ data, headers, onChange }) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [importing, setImporting] = useState("");
   const editing = products.find((product) => product.id === editingId);
   const filteredProducts = products
     .filter((product) => product.name.toLowerCase().includes(search.toLowerCase()))
@@ -3234,6 +3235,28 @@ function AdminProducts({ data, headers, onChange }) {
     }
   };
 
+  const runProductImport = async (mode) => {
+    const label = mode === "scrape" ? "live scrape" : "bundled seed";
+    if (!confirm(`Run ${label} now? This replaces imported products and updates existing imported rows.`)) return;
+    setError("");
+    setMessage("");
+    setImporting(mode);
+    try {
+      const result = await api("/admin/products/import", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ mode })
+      });
+      const summary = result.output?.split("\n").filter(Boolean).slice(-4).join(" · ");
+      setMessage(`${mode === "scrape" ? "Live scrape" : "Bundled seed"} complete. ${summary || "Products updated."}`);
+      onChange();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setImporting("");
+    }
+  };
+
   const currentPreview = imagePreview || form.image || "";
 
   const [showForm, setShowForm] = useState(false);
@@ -3251,7 +3274,17 @@ function AdminProducts({ data, headers, onChange }) {
 
   return (
     <div className="admin-content-stack">
-      <AdminPageHeader section="products" title="Products" subtitle="Create, edit, stock, and organize digital products." action={<button className="primary-btn" onClick={openNew}><Plus className="h-4 w-4" /> Add Product</button>} />
+      <AdminPageHeader section="products" title="Products" subtitle="Create, edit, stock, and organize digital products." action={
+        <div style={{display:"flex",alignItems:"center",gap:".55rem",flexWrap:"wrap"}}>
+          <button className="small-btn" disabled={!!importing} onClick={() => runProductImport("seed")}>
+            <RefreshCw className={`h-4 w-4 ${importing === "seed" ? "animate-spin" : ""}`} /> Seed Bundled
+          </button>
+          <button className="small-btn" disabled={!!importing} onClick={() => runProductImport("scrape")}>
+            <Download className={`h-4 w-4 ${importing === "scrape" ? "animate-spin" : ""}`} /> Live Scrape
+          </button>
+          <button className="primary-btn" onClick={openNew}><Plus className="h-4 w-4" /> Add Product</button>
+        </div>
+      } />
 
       {(message || error) && <AdminNotice message={message || error} tone={error ? "error" : "success"} />}
 
